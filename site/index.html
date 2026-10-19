@@ -57,16 +57,14 @@
 
   h2 { font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin: 120px 0 28px; }
 
-  .tools { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; text-align: left; }
-  .tool { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  .tools { display: grid; grid-template-columns: repeat(6, 1fr); gap: 20px; text-align: left; }
+  .tool { grid-column: span 2; margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  .tool:nth-child(n + 4) { grid-column: span 3; }
   .tool img, .tool pre { display: block; width: 100%; aspect-ratio: 1600 / 1000; margin: 0; border-bottom: 1px solid var(--line); }
   .tool img { object-fit: cover; }
   .tool figcaption { padding: 16px 20px 18px; text-align: center; }
   .tool strong { display: block; font-weight: 600; }
   .tool span { color: var(--text-2); font-size: 15px; }
-  .tool.wide { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; }
-  .tool.wide pre { aspect-ratio: auto; border-bottom: 0; border-right: 1px solid var(--line); }
-  .tool.wide figcaption { align-self: center; padding: 28px; }
   .tool pre { padding: 20px; overflow: auto; background: #0e0e12; font-size: 12.5px; line-height: 1.6; color: var(--text-2); }
   .tool pre b { color: #a5a6ff; font-weight: 400; }
   .tool pre i { color: #f9a8d4; font-style: normal; }
@@ -95,9 +93,8 @@
 
   @media (max-width: 600px) {
     main { padding: 64px 16px 64px; }
-    .tools, .tool.wide, .limits { grid-template-columns: 1fr; }
-    .tool.wide pre { border-right: 0; border-bottom: 1px solid var(--line); }
-    .tool.wide figcaption { padding: 16px 20px 18px; }
+    .tools, .limits { grid-template-columns: 1fr; }
+    .tool, .tool:nth-child(n + 4) { grid-column: auto; }
     .code pre { padding: 48px 14px 14px; }
   }
 </style>
@@ -133,7 +130,7 @@
       <img src="examples/figma.jpg" alt="Copy to Figma outlining the Changes list on a new rollout" loading="lazy">
       <figcaption><strong>Copy to Figma</strong><span>Paste a section or the whole page into Figma as layers.</span></figcaption>
     </figure>
-    <figure class="tool wide">
+    <figure class="tool">
 <pre>{
   <b>"tool"</b>: <i>"Content editor"</i>,
   <b>"note"</b>: <i>"Shorter headline"</i>,
@@ -146,7 +143,7 @@
   },
   <b>"page"</b>: <i>"https://…/store/markets/rollouts"</i>
 }</pre>
-      <figcaption><strong>Send to Claude</strong><span>Every tool ends with a button that copies your changes as JSON, with a selector for each element. Paste it into your coding agent to make the change for real.</span></figcaption>
+      <figcaption><strong>Send to Claude</strong><span>Copy your changes as JSON, with a selector for each element, for your coding agent.</span></figcaption>
     </figure>
   </div>
 
