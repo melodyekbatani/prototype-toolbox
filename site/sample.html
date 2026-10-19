@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fernwood Kettle Co. · Sample page</title>
+<meta name="description" content="A plain mock storefront for trying the prototype toolbox on.">
+<style>
+  /* A deliberately ordinary page: its own resets and a few aggressive global
+     rules, to prove the toolbox's shadow DOM keeps it unaffected. */
+  * { box-sizing: border-box; }
+  button, div, span { font-family: Georgia, serif; }
+  html, body { overflow-x: clip; }
+  body { margin: 0; font: 16px/1.55 Georgia, 'Times New Roman', serif; color: #1f2420; background: #f7f4ee; }
+  a { color: inherit; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+  .demo-banner { background: #1f2420; color: #e9e4d8; font: 13px/1.4 system-ui, sans-serif; text-align: center; padding: 9px 16px; }
+  .demo-banner a { color: #ffd8a8; margin-left: 4px; }
+  header { border-bottom: 1px solid #e3ddd1; background: #fffdf8; }
+  .bar { display: flex; align-items: center; justify-content: space-between; height: 68px; }
+  .logo { font-weight: 700; font-size: 20px; letter-spacing: -0.01em; text-decoration: none; }
+  nav { display: flex; gap: 22px; font-size: 15px; }
+  nav a { text-decoration: none; opacity: .8; }
+  .hero { display: grid; grid-template-columns: 1.1fr 1fr; gap: 48px; align-items: center; padding-top: 64px; padding-bottom: 64px; }
+  .eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: 12px; color: #6b5d45; margin: 0 0 12px; }
+  h1 { font-size: 52px; line-height: 1.05; margin: 0 0 18px; letter-spacing: -0.02em; }
+  .lede { font-size: 19px; color: #4a4f48; margin: 0 0 28px; max-width: 34ch; }
+  .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; height: 46px; padding: 0 22px; border-radius: 10px; border: 0; font-size: 16px; cursor: pointer; text-decoration: none; }
+  .btn-primary { background: #1f5130; color: #fff; }
+  .btn-secondary { background: transparent; color: #1f5130; box-shadow: inset 0 0 0 1.5px #1f5130; }
+  .hero-art { position: relative; }
+  .hero-art img.photo { width: 100%; display: block; border-radius: 18px; box-shadow: 0 20px 40px rgb(40 30 10 / .18); }
+  .hero-art img.sticker { position: absolute; width: 110px; top: -26px; right: -18px; rotate: 12deg; }
+  section { padding: 56px 0; }
+  h2 { font-size: 32px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .sub { color: #5d625a; margin: 0 0 28px; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .card { background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 2px rgb(0 0 0 / .06), 0 0 0 1px #ece6da; display: flex; flex-direction: column; }
+  .card img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+  .card-body { padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  .card h3 { margin: 0; font-size: 20px; }
+  .card p { margin: 0; color: #5d625a; font-size: 15px; flex: 1; }
+  .price-row { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+  .price { font-weight: 700; font-size: 18px; }
+  .tag { display: inline-block; font-size: 12px; padding: 2px 10px; border-radius: 99px; background: #e9f3ea; color: #1f5130; width: fit-content; }
+  .btn-small { height: 36px; padding: 0 14px; font-size: 14px; border-radius: 8px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; background: #1f2420; color: #f7f4ee; border-radius: 18px; padding: 36px; }
+  .stat strong { display: block; font-size: 40px; line-height: 1; margin-bottom: 6px; }
+  .chart { background: #fff; border-radius: 14px; padding: 24px; box-shadow: 0 0 0 1px #ece6da; }
+  .quote { font-size: 24px; font-style: italic; max-width: 40ch; margin: 0 0 10px; }
+  footer { border-top: 1px solid #e3ddd1; padding: 28px 0 80px; color: #6b6f68; font-size: 14px; }
+  @media (max-width: 760px) {
+    .hero { grid-template-columns: 1fr; padding-top: 36px; padding-bottom: 36px; }
+    h1 { font-size: 38px; }
+    nav { display: none; }
+    .cards, .stats { grid-template-columns: 1fr; }
+    .hero > * { min-width: 0; }
+    .hero-art img.sticker { width: 84px; right: -6px; }
+  }
+</style>
+</head>
+<body>
+<div class="demo-banner">Sample page for the prototype toolbox. Click your <strong>Prototype toolbox</strong> bookmark, or <a href="{{BOOKMARKLET_HREF}}" id="load-toolbox">load it here</a>. <a href="./">Back to the toolbox page</a></div>
+<header>
+  <div class="wrap bar">
+    <a class="logo" href="#">Fernwood Kettle Co.</a>
+    <nav><a href="#shop">Shop</a><a href="#story">Our story</a><a href="#journal">Journal</a><a href="#help">Help</a></nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap hero" id="hero">
+    <div>
+      <p class="eyebrow">Small-batch, slow-poured</p>
+      <h1>Coffee gear for unhurried mornings</h1>
+      <p class="lede">Hand-thrown mugs, gooseneck kettles and single-origin beans, made by a two-person workshop.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="#shop" id="shop-now">Shop the collection</a>
+        <button class="btn btn-secondary" type="button" onclick="alert('The page’s own button was clicked')">Take the quiz</button>
+      </div>
+    </div>
+    <div class="hero-art">
+      <img class="photo" src="sample-assets/hero.svg" alt="Hills at sunrise">
+      <img class="sticker" src="sample-assets/sticker.svg" alt="New">
+    </div>
+  </div>
+
+  <section id="shop">
+    <div class="wrap">
+      <h2>This week's favourites</h2>
+      <p class="sub">Three things we can't stop using.</p>
+      <div class="cards">
+        <article class="card">
+          <img src="sample-assets/mug.svg" alt="Blue mug">
+          <div class="card-body">
+            <span class="tag">Bestseller</span>
+            <h3>Harbour Mug</h3>
+            <p>A heavy stoneware mug glazed the colour of the bay in winter.</p>
+            <div class="price-row"><span class="price">$34</span><button class="btn btn-primary btn-small" type="button">Add to cart</button></div>
+          </div>
+        </article>
+        <article class="card">
+          <img src="sample-assets/beans.svg" alt="Coffee beans">
+          <div class="card-body">
+            <span class="tag">New roast</span>
+            <h3>Plum Hill Beans</h3>
+            <p>Washed Ethiopian beans with notes of stone fruit and cocoa.</p>
+            <div class="price-row"><span class="price">$21</span><button class="btn btn-primary btn-small" type="button">Add to cart</button></div>
+          </div>
+        </article>
+        <article class="card">
+          <img src="sample-assets/kettle.svg" alt="Orange kettle">
+          <div class="card-body">
+            <span class="tag">Limited</span>
+            <h3>Ember Kettle</h3>
+            <p>A gooseneck kettle with a pour you can steer to the millimetre.</p>
+            <div class="price-row"><span class="price">$89</span><button class="btn btn-primary btn-small" type="button">Add to cart</button></div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="story">
+    <div class="wrap">
+      <div class="stats">
+        <div class="stat"><strong>12k</strong>mugs thrown since 2019</div>
+        <div class="stat"><strong>4.9</strong>average review score</div>
+        <div class="stat"><strong>2</strong>people in the workshop</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="journal">
+    <div class="wrap">
+      <h2>Brewing, by the numbers</h2>
+      <p class="sub">Cups poured per weekday, last month.</p>
+      <div class="chart">
+        <svg viewBox="0 0 500 180" width="100%" height="180" role="img" aria-label="Cups poured per weekday">
+          <g fill="#1f5130">
+            <rect x="20" y="70" width="60" height="100" rx="6" aria-label="Monday"/>
+            <rect x="115" y="40" width="60" height="130" rx="6" aria-label="Tuesday"/>
+            <rect x="210" y="90" width="60" height="80" rx="6" aria-label="Wednesday"/>
+            <rect x="305" y="20" width="60" height="150" rx="6" fill="#f08c00" aria-label="Thursday"/>
+            <rect x="400" y="60" width="60" height="110" rx="6" aria-label="Friday"/>
+          </g>
+        </svg>
+      </div>
+      <blockquote style="margin: 40px 0 0">
+        <p class="quote">“The Harbour Mug is the first thing I reach for every morning.”</p>
+        <cite>— Priya, Portland</cite>
+      </blockquote>
+    </div>
+  </section>
+</main>
+
+<footer id="help">
+  <div class="wrap">Fernwood Kettle Co. is a fictional shop, made up for testing the prototype toolbox.</div>
+</footer>
+</body>
+</html>

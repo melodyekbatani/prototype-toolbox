@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prototype Toolbox</title>
+<meta name="description" content="A bookmarklet that drops prototyping tools onto any web page: tweak styles, move things around, rewrite copy and copy sections to Figma.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Crect width='20' height='20' rx='6' fill='%234645b8'/%3E%3Cg fill='none' stroke='white' stroke-width='1.4' stroke-linejoin='round'%3E%3Cpath d='M7.5 6.5V5.3c0-.7.5-1.2 1.2-1.2h2.6c.7 0 1.2.5 1.2 1.2v1.2'/%3E%3Cpath d='M4 10V8.3c0-1 .8-1.8 1.8-1.8h8.4c1 0 1.8.8 1.8 1.8V10Z'/%3E%3Cpath d='M4 10h12v3.4c0 1-.8 1.8-1.8 1.8H5.8c-1 0-1.8-.8-1.8-1.8Z'/%3E%3C/g%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #fbfbfd;
+    --bg-soft: #f2f2f7;
+    --card: #ffffff;
+    --text: #15151a;
+    --text-2: #4b4b57;
+    --text-3: #7a7a88;
+    --line: #e4e4ec;
+    --accent: #4645b8;
+    --accent-2: #7b7cf5;
+    --accent-soft: #ececfe;
+    --code-bg: #f4f4f8;
+    --shadow: 0 1px 2px rgb(20 20 40 / 0.04), 0 8px 24px rgb(20 20 40 / 0.06);
+    --radius: 18px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0b0e;
+      --bg-soft: #131318;
+      --card: #15151b;
+      --text: #f2f2f6;
+      --text-2: #b4b4c2;
+      --text-3: #84849a;
+      --line: #25252e;
+      --accent: #a5a6ff;
+      --accent-2: #7b7cf5;
+      --accent-soft: #1e1e3a;
+      --code-bg: #101015;
+      --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.35);
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  code, kbd, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  kbd {
+    display: inline-block; min-width: 1.6em; padding: 0 6px; border-radius: 6px;
+    border: 1px solid var(--line); border-bottom-width: 2px; background: var(--card);
+    font-size: 0.78em; line-height: 1.6; text-align: center; color: var(--text-2);
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* Top bar */
+  .top { position: sticky; top: 0; z-index: 5; backdrop-filter: saturate(1.6) blur(12px); -webkit-backdrop-filter: saturate(1.6) blur(12px); background: color-mix(in srgb, var(--bg) 82%, transparent); border-bottom: 1px solid var(--line); }
+  .top .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 16px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -0.01em; color: var(--text); text-decoration: none; }
+  .mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; color: #fff; background: radial-gradient(ellipse 110% 80% at 50% 100%, #7b7cf5 0%, #4645b8 45%, #1d1c4a 100%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.2); }
+  .top nav { display: flex; gap: 22px; font-size: 14px; }
+  .top nav a { color: var(--text-2); text-decoration: none; }
+  .top nav a:hover { color: var(--text); }
+
+  /* Hero */
+  .hero { padding: 88px 0 72px; position: relative; overflow: hidden; }
+  .hero::before { content: ''; position: absolute; inset: -40% -10% auto; height: 520px; background: radial-gradient(ellipse 50% 60% at 50% 40%, color-mix(in srgb, var(--accent-2) 22%, transparent), transparent 70%); pointer-events: none; }
+  .hero .wrap { position: relative; text-align: center; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 550; }
+  h1 { font-size: clamp(38px, 6.4vw, 68px); line-height: 1.02; letter-spacing: -0.035em; margin: 22px auto 18px; max-width: 14ch; font-weight: 720; }
+  .pitch { font-size: clamp(17px, 2vw, 20px); color: var(--text-2); max-width: 40em; margin: 0 auto 36px; }
+  .cta { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .bookmarklet {
+    display: inline-flex; align-items: center; gap: 12px; height: 60px; padding: 0 28px 0 22px;
+    border-radius: 99px; color: #fff; text-decoration: none; font-size: 18px; font-weight: 600; letter-spacing: -0.01em;
+    background: radial-gradient(ellipse 110% 80% at 50% 120%, #7b7cf5 0%, #4645b8 38%, #1d1c4a 72%, #0e0e16 100%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), inset 0 0 0 1px rgb(160 160 255 / 0.22), 0 14px 34px rgb(70 69 184 / 0.38);
+    cursor: grab; transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms;
+  }
+  .bookmarklet:hover { transform: translateY(-2px); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22), inset 0 0 0 1px rgb(160 160 255 / 0.3), 0 18px 40px rgb(70 69 184 / 0.48); }
+  .bookmarklet:active { cursor: grabbing; }
+  .drag-hint { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 14px; }
+  .drag-hint svg { color: var(--accent); }
+  .secondary { font-size: 15px; }
+  .live-note { margin: 44px auto 0; display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); color: var(--text-2); font-size: 14px; text-align: left; }
+  .live-dot { width: 8px; height: 8px; border-radius: 99px; background: #22c55e; box-shadow: 0 0 0 4px color-mix(in srgb, #22c55e 22%, transparent); flex-shrink: 0; }
+
+  /* Sections */
+  section { padding: 72px 0; }
+  section + section { border-top: 1px solid var(--line); }
+  .section-head { max-width: 620px; margin-bottom: 36px; }
+  h2 { font-size: clamp(28px, 3.6vw, 38px); letter-spacing: -0.025em; line-height: 1.12; margin: 0 0 10px; font-weight: 700; }
+  .section-head p { margin: 0; color: var(--text-2); font-size: 17px; }
+
+  .tools { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+  .tool { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px; }
+  .tool-head { display: flex; align-items: center; gap: 12px; }
+  .tool-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 99px; color: #f3f4f6; background: radial-gradient(circle at 50% 0%, #2c2c31 0%, #151517 65%, #0d0d0f 100%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.1), 0 6px 14px rgb(0 0 0 / 0.18); flex-shrink: 0; }
+  .tool h3 { margin: 0; font-size: 19px; letter-spacing: -0.01em; }
+  .tool p { margin: 0; color: var(--text-2); }
+  .tool ul { margin: 4px 0 0; padding-left: 18px; color: var(--text-2); font-size: 15px; }
+  .tool li + li { margin-top: 4px; }
+  .tool.wide { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 18px; }
+  .tool.wide p { flex: 1; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; counter-reset: step; margin-bottom: 36px; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; position: relative; }
+  .step::before { counter-increment: step; content: counter(step); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 14px; margin-bottom: 12px; }
+  .step h3 { margin: 0 0 6px; font-size: 17px; }
+  .step p { margin: 0; color: var(--text-2); font-size: 15px; }
+
+  .manual { background: var(--bg-soft); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; }
+  .manual h3 { margin: 0 0 6px; font-size: 17px; }
+  .manual > p { margin: 0 0 16px; color: var(--text-2); font-size: 15px; }
+  .code { position: relative; }
+  .code pre { margin: 0; padding: 16px 16px 16px; padding-right: 110px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 12px; font-size: 12.5px; line-height: 1.55; color: var(--text-2); white-space: pre-wrap; word-break: break-all; max-height: 168px; overflow: auto; }
+  .copy { position: absolute; top: 10px; right: 10px; height: 34px; padding: 0 14px; border-radius: 99px; border: 1px solid var(--line); background: var(--card); color: var(--text); font: 600 13px/1 inherit; font-family: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .copy:hover { border-color: var(--accent-2); }
+  .copy.done { color: #16a34a; }
+
+  .limits { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 28px; margin: 0; padding: 0; list-style: none; }
+  .limits li { padding: 16px 0 0; border-top: 1px solid var(--line); }
+  .limits strong { display: block; margin-bottom: 2px; font-size: 16px; }
+  .limits span { color: var(--text-2); font-size: 15px; }
+
+  footer { padding: 36px 0 120px; color: var(--text-3); font-size: 14px; border-top: 1px solid var(--line); }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+  footer code { font-size: 12.5px; }
+
+  @media (max-width: 760px) {
+    .top nav a:not(.keep) { display: none; }
+    .hero { padding: 56px 0 48px; }
+    .tools, .steps, .limits { grid-template-columns: 1fr; }
+    .tool.wide { flex-direction: column; align-items: flex-start; }
+    section { padding: 52px 0; }
+    .wrap { padding: 0 16px; }
+    .bookmarklet { height: 56px; font-size: 17px; }
+    .code pre { padding-right: 16px; padding-top: 54px; }
+    .live-note { margin-right: 56px; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#">
+      <span class="mark"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M7 6V4.5A1.5 1.5 0 0 1 8.5 3h3A1.5 1.5 0 0 1 13 4.5V6"/><path d="M2.5 10.5V8a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v2.5Z"/><path d="M2.5 10.5h15v4a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2Z"/><path d="M7.5 10.5v2M12.5 10.5v2" stroke-linecap="round"/></svg></span>
+      Prototype Toolbox
+    </a>
+    <nav>
+      <a href="#tools">Tools</a>
+      <a href="#install">Install</a>
+      <a href="#limits">Limitations</a>
+      <a class="keep" href="sample.html">Sample page</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="wrap">
+      <span class="eyebrow">A bookmarklet · works on most web pages</span>
+      <h1>Treat any page like your prototype.</h1>
+      <p class="pitch">One click drops a toolbox onto the page you're looking at. Nudge spacing and type, drag things around, rewrite the copy, then copy what you changed as CSS, JSON or Figma layers, or hand it to Claude.</p>
+      <div class="cta">
+        <a class="bookmarklet" href="{{BOOKMARKLET_HREF}}" title="Drag me to your bookmarks bar" id="bookmarklet" onclick="return bookmarkletClicked(event)">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M7 6V4.5A1.5 1.5 0 0 1 8.5 3h3A1.5 1.5 0 0 1 13 4.5V6"/><path d="M2.5 10.5V8a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v2.5Z"/><path d="M2.5 10.5h15v4a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2Z"/><path d="M7.5 10.5v2M12.5 10.5v2" stroke-linecap="round"/></svg>
+          Prototype toolbox
+        </a>
+        <span class="drag-hint"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5"/></svg>Drag it to your bookmarks bar</span>
+        <a class="secondary" href="sample.html">Or try it on the sample page →</a>
+      </div>
+      <div class="live-note"><span class="live-dot"></span><span>The toolbox is live on this page. It's the button in the bottom-right corner; open a tool and click anything here.</span></div>
+    </div>
+  </div>
+
+  <section id="tools">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Four tools, one tray</h2>
+        <p>Open one at a time from the toolbox button. Changes are made right in the page you're on, and every tool can copy out what you did.</p>
+      </div>
+      <div class="tools">
+        <article class="tool">
+          <div class="tool-head">
+            <span class="tool-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></span>
+            <h3>Style tweaker</h3>
+          </div>
+          <p>Click any element to see its padding, margin, gap, type, colour, corners and opacity, and step each one along a standard scale.</p>
+          <ul>
+            <li><kbd>↑</kbd> <kbd>↓</kbd> pick a control, <kbd>←</kbd> <kbd>→</kbd> step its value</li>
+            <li><kbd>⇧</kbd><kbd>↑</kbd> / <kbd>⇧</kbd><kbd>↓</kbd> climb to the parent or the first child</li>
+            <li>Copies every edit as CSS and as Tailwind classes</li>
+          </ul>
+        </article>
+        <article class="tool">
+          <div class="tool-head">
+            <span class="tool-icon"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2v14M2 9h14M9 2 7 4M9 2l2 2M9 16l-2-2M9 16l2-2M2 9l2-2M2 9l2 2M16 9l-2-2M16 9l-2 2"/></svg></span>
+            <h3>Arranger</h3>
+          </div>
+          <p>Move, scale, rotate and flip anything on the page, from an image to a single bar of a chart, without touching the layout around it.</p>
+          <ul>
+            <li>Drag to move, <kbd>⌥</kbd>-drag to scale, corner and rotate handles</li>
+            <li><kbd>⇧</kbd>-click to move several things as a group</li>
+            <li>Copies the offsets as JSON, keyed by CSS selector</li>
+          </ul>
+        </article>
+        <article class="tool">
+          <div class="tool-head">
+            <span class="tool-icon"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.75 4.5h10.5M2.75 8.5h7M2.75 12.5h3.5"/><path d="M10.75 15.25 11.3 13l4.2-4.2a1.25 1.25 0 0 1 1.75 1.75l-4.2 4.2Z"/></svg></span>
+            <h3>Content editor</h3>
+          </div>
+          <p>Click any text and type over it. Headlines, buttons, labels, even text under overlays. Every change is listed with what it used to say.</p>
+          <ul>
+            <li><kbd>Enter</kbd> finishes, <kbd>Esc</kbd> stops editing</li>
+            <li>Undo edits one at a time or all at once</li>
+            <li>Copies a before → after list for whoever owns the copy</li>
+          </ul>
+        </article>
+        <article class="tool">
+          <div class="tool-head">
+            <span class="tool-icon"><svg width="12" height="18" viewBox="0 0 12 18" fill="none" stroke="currentColor" stroke-width="1.25" aria-hidden="true"><path d="M2.75 1h3v5h-3a2.5 2.5 0 0 1 0-5Z"/><path d="M6.25 1h3a2.5 2.5 0 0 1 0 5h-3V1Z"/><path d="M2.75 6.5h3v5h-3a2.5 2.5 0 0 1 0-5Z"/><circle cx="8.75" cy="9" r="2.5"/><path d="M5.75 12v2.75a2.75 2.75 0 1 1-2.75-2.75h2.75Z"/></svg></span>
+            <h3>Copy to Figma</h3>
+          </div>
+          <p>Pick a section, or take the whole page, and paste it into Figma as real layers: frames, editable text, images, borders and shadows.</p>
+          <ul>
+            <li>Hover to choose, <kbd>↑</kbd> widens to the parent, <kbd>P</kbd> takes the page</li>
+            <li><kbd>⌥</kbd> picks a single shape inside a chart</li>
+            <li>Then <kbd>⌘</kbd><kbd>V</kbd> in any Figma file</li>
+          </ul>
+        </article>
+        <article class="tool wide">
+          <span class="tool-icon"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="11" height="8.5" rx="2.5"/><path d="M8 5V2.75M1 8.5v2M15 8.5v2M6.5 11h3"/><circle cx="8" cy="2.25" r="0.75" fill="currentColor"/><circle cx="5.75" cy="8.5" r="0.9" fill="currentColor" stroke="none"/><circle cx="10.25" cy="8.5" r="0.9" fill="currentColor" stroke="none"/></svg></span>
+          <p><strong>Copy for Claude.</strong> The style tweaker, Arranger and content editor each end with a note field and a button that copies your changes as JSON, with the page URL and a selector for every element. Paste it into a chat with your coding agent to make the changes in the real code.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Install in ten seconds</h2>
+        <p>It's a bookmark, so there's nothing to install and nothing to update: it loads the latest toolbox each time.</p>
+      </div>
+      <div class="steps">
+        <div class="step"><h3>Show your bookmarks bar</h3><p>Press <kbd>⌘</kbd><kbd>⇧</kbd><kbd>B</kbd> in Chrome, Edge, Arc or Firefox (<kbd>Ctrl</kbd><kbd>⇧</kbd><kbd>B</kbd> on Windows). In Safari, choose View › Show Favorites Bar.</p></div>
+        <div class="step"><h3>Drag the button up</h3><p>Drag the <strong>Prototype toolbox</strong> button above onto the bar. Dragging works; clicking it here only toggles the toolbox on this page.</p></div>
+        <div class="step"><h3>Click it on any page</h3><p>The toolbox appears in the bottom-right corner. Click the bookmark again to put it away, and again to bring it back.</p></div>
+      </div>
+      <div class="manual">
+        <h3>Or add it by hand</h3>
+        <p>Create a new bookmark (in Chrome: right-click the bookmarks bar › Add page…), name it "Prototype toolbox", and paste this as its URL.</p>
+        <div class="code">
+          <pre id="code">{{BOOKMARKLET_CODE}}</pre>
+          <button class="copy" type="button" id="copy">Copy code</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="limits">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Known limitations</h2>
+        <p>It works on most pages, but it runs as a guest on someone else's page, so some won't let it in.</p>
+      </div>
+      <ul class="limits">
+        <li><strong>Sites with a strict Content Security Policy</strong><span>GitHub, Google Docs, Gmail and many banking and admin sites refuse scripts from other domains. The bookmark tells you when that happens.</span></li>
+        <li><strong>Nothing is saved</strong><span>Every change lives in the open tab and is gone on reload, or when the page's own code redraws that part. Copy your changes out before you leave.</span></li>
+        <li><strong>Iframes</strong><span>The tools reach the top page only. Content inside embedded frames, like some checkouts, videos and editors, can't be picked.</span></li>
+        <li><strong>Shadow DOM-heavy apps</strong><span>Pages built from web components keep their insides closed off, so the pickers usually stop at the component's outer box. Copy to Figma does look inside open shadow roots.</span></li>
+        <li><strong>Sites that redraw constantly</strong><span>Single-page apps can re-render text and styles you've edited. The Arranger reapplies its moves; text and style edits can be lost.</span></li>
+        <li><strong>Hosted behind SSO</strong><span>If this site is behind a login, other sites can't load the toolbox from it, because the login cookie isn't sent. Host <code>toolbox.js</code> somewhere public for the bookmark to work everywhere.</span></li>
+        <li><strong>Cross-origin images</strong><span>Images from another domain without CORS can't be read, so Copy to Figma shows them as grey boxes and the pickers treat them as solid.</span></li>
+        <li><strong>Desktop browsers</strong><span>It's built for a mouse and keyboard in Chrome, Edge, Arc, Firefox and Safari. Mobile browsers make bookmarklets awkward to run.</span></li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Prototype Toolbox {{VERSION}} · toolbox.js {{BUNDLE_SIZE}}</span>
+    <span>Loads from <code>{{BASE_URL}}</code></span>
+  </div>
+</footer>
+
+<script>
+  // Clicking the bookmarklet here toggles the toolbox already on this page,
+  // which is what it does anywhere; say so, since people tend to click it.
+  function bookmarkletClicked(event) {
+    if (window.__prototypeToolbox) {
+      event.preventDefault();
+      window.__prototypeToolbox.toggle();
+      return false;
+    }
+    return true;
+  }
+  document.getElementById('copy').addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    const text = document.getElementById('code').textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const range = document.createRange();
+      range.selectNodeContents(document.getElementById('code'));
+      getSelection().removeAllRanges();
+      getSelection().addRange(range);
+      document.execCommand('copy');
+    }
+    button.textContent = 'Copied';
+    button.classList.add('done');
+    setTimeout(() => { button.textContent = 'Copy code'; button.classList.remove('done'); }, 1600);
+  });
+</script>
+<script>
+  // The live toolbox: tray fanned out on wide screens, just its button on
+  // phones, where the open tray would sit over the text.
+  (() => {
+    const s = document.createElement('script');
+    s.src = 'toolbox.js';
+    s.dataset.prototypeToolboxScript = '';
+    if (matchMedia('(max-width: 700px)').matches) s.dataset.start = 'tray-closed';
+    document.body.append(s);
+  })();
+</script>
+</body>
+</html>

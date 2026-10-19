@@ -1,0 +1,26 @@
+{
+  "name": "prototype-toolbox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A bookmarklet that drops prototyping tools onto any web page.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:local": "TOOLBOX_BASE_URL=http://localhost:4173 node scripts/build.mjs",
+    "dev": "TOOLBOX_BASE_URL=http://localhost:4173 node scripts/build.mjs --watch --serve",
+    "serve": "node scripts/serve.mjs dist 4173",
+    "typecheck": "tsc --noEmit",
+    "test": "TOOLBOX_BASE_URL=http://localhost:4173 node scripts/build.mjs && node test/run.mjs",
+    "deploy": "node scripts/build.mjs && quick deploy dist ${QUICK_SITE:-prototype-toolbox}"
+  },
+  "devDependencies": {
+    "esbuild": "~0.25.12",
+    "preact": "^10.29.8",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}
