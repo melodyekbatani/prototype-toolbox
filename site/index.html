@@ -59,7 +59,7 @@
 
   .tools { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; text-align: left; }
   .tool { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
-  .tool img, .tool pre { display: block; width: 100%; aspect-ratio: 1400 / 875; margin: 0; border-bottom: 1px solid var(--line); }
+  .tool img, .tool pre { display: block; width: 100%; aspect-ratio: 1600 / 1000; margin: 0; border-bottom: 1px solid var(--line); }
   .tool img { object-fit: cover; }
   .tool figcaption { padding: 16px 20px 18px; text-align: center; }
   .tool strong { display: block; font-weight: 600; }
@@ -118,33 +118,33 @@
   <h2>Tools</h2>
   <div class="tools">
     <figure class="tool">
-      <img src="examples/style-tweaker.jpg" alt="The style tweaker panel editing a headline's size, weight and colour" loading="lazy">
+      <img src="examples/style-tweaker.jpg" alt="The style tweaker recolouring the Rollouts headline in the admin" loading="lazy">
       <figcaption><strong>Style tweaker</strong><span>Adjust spacing, type, colour and corners. Copies as CSS or Tailwind.</span></figcaption>
     </figure>
     <figure class="tool">
-      <img src="examples/arranger.jpg" alt="The Arranger rotating a product image, with a sticker moved onto the hero" loading="lazy">
+      <img src="examples/arranger.jpg" alt="The Arranger moving and rotating the calendar illustration on the Rollouts page" loading="lazy">
       <figcaption><strong>Arranger</strong><span>Move, scale and rotate anything. Copies as JSON.</span></figcaption>
     </figure>
     <figure class="tool">
-      <img src="examples/content-editor.jpg" alt="The content editor renaming Harbour Mug to Tidepool Mug" loading="lazy">
+      <img src="examples/content-editor.jpg" alt="The content editor rewriting the Rollouts headline and a card title" loading="lazy">
       <figcaption><strong>Content editor</strong><span>Click text and type over it. Copies a before → after list.</span></figcaption>
     </figure>
     <figure class="tool">
-      <img src="examples/figma-pick.jpg" alt="Copy to Figma outlining a row of product cards" loading="lazy">
+      <img src="examples/figma.jpg" alt="Copy to Figma outlining the Changes list on a new rollout" loading="lazy">
       <figcaption><strong>Copy to Figma</strong><span>Paste a section or the whole page into Figma as layers.</span></figcaption>
     </figure>
     <figure class="tool wide">
 <pre>{
   <b>"tool"</b>: <i>"Content editor"</i>,
-  <b>"note"</b>: <i>"Use the new name everywhere"</i>,
+  <b>"note"</b>: <i>"Shorter headline"</i>,
   <b>"data"</b>: {
     <b>"edits"</b>: [{
-      <b>"selector"</b>: <i>".card:nth-child(1) h3"</i>,
-      <b>"before"</b>: <i>"Harbour Mug"</i>,
-      <b>"after"</b>: <i>"Tidepool Mug"</i>
+      <b>"selector"</b>: <i>"main h1"</i>,
+      <b>"before"</b>: <i>"Schedule updates to your store"</i>,
+      <b>"after"</b>: <i>"Plan your next launch"</i>
     }]
   },
-  <b>"page"</b>: <i>"https://…/sample.html"</i>
+  <b>"page"</b>: <i>"https://…/store/markets/rollouts"</i>
 }</pre>
       <figcaption><strong>Send to Claude</strong><span>Every tool ends with a button that copies your changes as JSON, with a selector for each element. Paste it into your coding agent to make the change for real.</span></figcaption>
     </figure>
