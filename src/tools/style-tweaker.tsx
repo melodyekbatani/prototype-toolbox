@@ -1,6 +1,7 @@
 import React from 'react';
+import { useClipboard } from '../core/clipboard';
 import {
-  SendToRobots,
+  CopyForAI,
   ToolboxItem,
   cx,
   useDraggablePanel,
@@ -8,7 +9,7 @@ import {
 } from '../core/toolbox';
 import { pickAt } from '../core/hit-test';
 import { componentName, describe, pathTo } from '../core/describe';
-import { isToolUi, typingInField, writeClipboard } from '../core/dom';
+import { isToolUi, typingInField } from '../core/dom';
 
 /**
  * Style tweaker. Open it and click anything on the page: it works out what
@@ -358,7 +359,7 @@ function detect(el: HTMLElement): { kind: Kind; sections: Section[] } {
   return { kind, sections };
 }
 
-type Edit = { from: string; to: string };
+type Edit = { from: string; to: string; inline: string; priority: string };
 type Entry = {
   el: HTMLElement;
   name: string;
@@ -375,13 +376,13 @@ export function StyleTweaker() {
   const [hovered, setHovered] = React.useState<HTMLElement | null>(null);
   const [entries, setEntries] = React.useState<Entry[]>([]);
   const [active, setActive] = React.useState(0);
-  const [copied, setCopied] = React.useState(false);
+  const clipboard = useClipboard();
   const [, setFrame] = React.useState(0);
   useToolboxExclusive(open, () => setOpen(false));
 
   // While open, hovering outlines an element and a click selects it without
   // reaching the page; the toolbox's own UI stays clickable.
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!open) return;
     // What the pointer is on as it looks: past empty wrappers and the clear
     // parts of cut-out images stacked over it.
@@ -419,7 +420,7 @@ export function StyleTweaker() {
   }, [open]);
 
   // Keep the outlines on their elements while the page scrolls or reflows.
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!open || (!selected && !hovered)) return;
     let raf = 0;
     const tick = () => {
@@ -453,8 +454,10 @@ export function StyleTweaker() {
       const edits = { ...base.edits };
       for (const [prop, value] of Object.entries(styles)) {
         const from = edits[prop]?.from ?? cs.getPropertyValue(prop);
+        const inline = edits[prop]?.inline ?? selected.style.getPropertyValue(prop);
+        const priority = edits[prop]?.priority ?? selected.style.getPropertyPriority(prop);
         selected.style.setProperty(prop, value, 'important');
-        edits[prop] = { from, to: value };
+        edits[prop] = { from, to: value, inline, priority };
       }
       const next = {
         ...base,
@@ -517,7 +520,7 @@ export function StyleTweaker() {
 
   // The arrow keys drive the controls while the tweaker's open, except in a
   // field (the page's or the toolbox's own).
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!open) return;
     const directions: Record<string, Direction> = {
       ArrowUp: 'up',
@@ -542,8 +545,10 @@ export function StyleTweaker() {
   }, [open]);
 
   const resetEntry = (target: Entry) => {
-    for (const prop of Object.keys(target.edits))
-      target.el.style.removeProperty(prop);
+    for (const [prop, edit] of Object.entries(target.edits)) {
+      if (edit.inline) target.el.style.setProperty(prop, edit.inline, edit.priority);
+      else target.el.style.removeProperty(prop);
+    }
     setEntries((list) => list.filter((e) => e !== target));
   };
 
@@ -562,9 +567,7 @@ export function StyleTweaker() {
   ].join('\n');
 
   const copy = async () => {
-    await writeClipboard(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    await clipboard.copy(text);
   };
 
   const outline = (el: HTMLElement | null, tone: 'hover' | 'selected') => {
@@ -709,7 +712,7 @@ export function StyleTweaker() {
             </ul>
           )}
           <div className="tb-panel-foot">
-            <SendToRobots
+            <CopyForAI
               tool="Style tweaker"
               getData={() => ({
                 summary: text,
@@ -724,7 +727,7 @@ export function StyleTweaker() {
             />
             <div className="tb-links">
               <button type="button" disabled={entries.length === 0} onClick={copy}>
-                {copied ? 'Copied' : 'Copy edits'}
+                {clipboard.label('Copy edits')}
               </button>
               <button
                 type="button"

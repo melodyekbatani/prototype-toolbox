@@ -511,7 +511,7 @@ svg {
   color: var(--tb-muted);
 }
 
-.tb-robots {
+.tb-ai-handoff {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -992,6 +992,102 @@ svg {
   box-shadow: 0 0 0 1px var(--tb-fill), 0 8px 20px rgb(0 0 0 / 0.3);
 }
 
+/* ---- Annotate */
+
+.tb-pin {
+  position: fixed;
+  z-index: 12;
+  display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  margin: -24px 0 0 0;
+  border-radius: 50% 50% 50% 2px;
+  background: var(--tb-pink);
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  text-align: center;
+  box-shadow: 0 0 0 2px #fff, 0 4px 10px rgb(0 0 0 / 0.35);
+  transition: scale 200ms var(--tb-spring);
+}
+
+.tb-pin:hover,
+.tb-pin.is-editing {
+  scale: 1.15;
+}
+
+.tb-pin.is-editing {
+  background: var(--tb-indigo);
+}
+
+.tb-note-pop {
+  position: fixed;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 16px;
+  padding: 10px;
+  background: linear-gradient(to bottom, #141416, #0b0b0d);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08), 0 16px 32px rgb(0 0 0 / 0.5);
+  font-size: 11px;
+}
+
+.tb-note-field {
+  width: 100%;
+  resize: none;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tb-fill);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--tb-text);
+  outline: none;
+  box-shadow: 0 0 0 1px var(--tb-fill);
+}
+
+.tb-note-field::placeholder {
+  color: var(--tb-faint);
+}
+
+.tb-note-field:focus {
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.2);
+}
+
+.tb-note-pop .tb-links {
+  gap: 12px;
+}
+
+.tb-note-number {
+  display: flex;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--tb-pink);
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.tb-note-text {
+  color: var(--tb-text);
+  overflow-wrap: anywhere;
+}
+
+.tb-note-on {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--tb-faint);
+}
+
 /* ---- Narrow screens: panels span the width beside the tray */
 
 @media (max-width: 520px) {
@@ -1015,3 +1111,6 @@ svg {
     border-radius: 14px;
   }
 }
+
+.tb-ai-help { color: var(--tb-muted); font-size: 11px; line-height: 1.5; text-align: center; }
+.tb-ai-help button { display: block; margin: 3px auto 0; text-decoration: underline; text-underline-offset: 3px; }

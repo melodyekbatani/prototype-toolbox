@@ -5,17 +5,17 @@
 //   bookmarklet.txt the bookmarklet's code, for pasting by hand
 //
 // TOOLBOX_BASE_URL  where toolbox.js will be served (default: production)
-// TOOLBOX_ROBOTS_URL optional endpoint "Send to Claude" posts to
 // --watch           rebuild on changes;  --serve  serve dist/ on :4173
 import * as esbuild from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { serve } from './serve.mjs';
+import { icons } from './icons.mjs';
+import { execFileSync } from 'node:child_process';
 
 const PRODUCTION_URL = 'https://prototype-toolbox.quick.shopify.io';
 const baseUrl = (process.env.TOOLBOX_BASE_URL || PRODUCTION_URL).replace(/\/$/, '');
-const robotsUrl = process.env.TOOLBOX_ROBOTS_URL || '';
 const watch = process.argv.includes('--watch');
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const dist = path.join(root, 'dist');
@@ -67,7 +67,7 @@ async function build() {
     plugins: [minifiedCss],
     define: {
       __VERSION__: JSON.stringify(version),
-      __ROBOTS_URL__: JSON.stringify(robotsUrl),
+      __EXTENSION__: 'false',
       'process.env.NODE_ENV': '"production"',
     },
     banner: { js: `/* Prototype toolbox ${version} */` },
@@ -98,6 +98,21 @@ async function build() {
       fs.copyFileSync(from, to);
     }
   }
+  const extension = path.join(root, 'extension-dist');
+  fs.mkdirSync(extension, { recursive: true });
+  fs.cpSync(path.join(root, 'extension'), extension, { recursive: true });
+  icons(path.join(extension, 'icons'));
+  await esbuild.build({
+    entryPoints: [path.join(root, 'src/main.tsx')], outfile: path.join(extension, 'toolbox.js'),
+    bundle: true, format: 'iife', minify: true, target: 'chrome120',
+    jsx: 'automatic', jsxImportSource: 'preact',
+    alias: { react: 'preact/compat', 'react-dom': 'preact/compat' }, plugins: [minifiedCss],
+    define: { __VERSION__: JSON.stringify(pkg.version), __EXTENSION__: 'true', 'process.env.NODE_ENV': '"production"' },
+    legalComments: 'none',
+  });
+  const archive = path.join(dist, 'prototype-toolbox-extension.zip');
+  fs.rmSync(archive, { force: true });
+  execFileSync('zip', ['-qr', archive, '.'], { cwd: extension });
   console.log(`Built dist/ in ${Date.now() - started}ms · toolbox.js ${size} · base ${baseUrl}`);
 }
 
@@ -105,7 +120,7 @@ await build();
 
 if (watch) {
   let timer;
-  for (const dir of ['src', 'site', 'scripts']) {
+  for (const dir of ['src', 'site', 'scripts', 'extension']) {
     fs.watch(path.join(root, dir), { recursive: true }, () => {
       clearTimeout(timer);
       timer = setTimeout(() => build().catch((e) => console.error(e.message)), 100);

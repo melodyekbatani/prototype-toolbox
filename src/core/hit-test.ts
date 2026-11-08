@@ -163,9 +163,14 @@ function clearAt(img: HTMLImageElement, x: number, y: number) {
  * toolbox's own UI, bare wrappers and clear image pixels.
  */
 export function pickAt(x: number, y: number) {
+  const seen = new Set<Element>();
+  const expand = (elements: Element[]): Element[] => elements.flatMap(el => {
+    if (seen.has(el) || isToolUi(el)) return [];
+    seen.add(el);
+    return [...(el.shadowRoot ? expand(el.shadowRoot.elementsFromPoint(x, y)) : []), el];
+  });
   return (
-    document
-      .elementsFromPoint(x, y)
+    expand(document.elementsFromPoint(x, y))
       .find(
         (el) =>
           !isToolUi(el) &&

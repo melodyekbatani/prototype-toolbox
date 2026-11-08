@@ -1,6 +1,6 @@
 import React from 'react';
 import { ToolboxItem, useToolboxExclusive } from '../core/toolbox';
-import { TOOL_UI, isToolUi, writeClipboard } from '../core/dom';
+import { TOOL_UI, isToolUi, writeClipboard, downloadText, realTarget } from '../core/dom';
 
 /**
  * Copy to Figma: pick a section of the page (or take the whole page) and copy
@@ -18,6 +18,7 @@ const SKIP = TOOL_UI;
 const MAX_LAYERS = 3000;
 // A whole page runs to far more layers than a section.
 const MAX_PAGE_LAYERS = 12000;
+const captureWarnings = new Set<string>();
 
 // ---- The copied section (the plugin reads this shape; bump `v` if it changes)
 
@@ -72,6 +73,8 @@ type Layer = {
   h: number;
   abs?: boolean;
   o?: number;
+  /** Degrees turned about its centre; x/y/w/h are its unturned box. */
+  rot?: number;
   fill?: RGBA4;
   bg?: Grad[];
   stroke?: { c: RGBA4; w: Sides; style: 'solid' | 'dashed' | 'dotted' };
@@ -96,6 +99,29 @@ type Img = {
   fit: 'cover' | 'contain' | 'fill';
   align: string;
 };
+
+// ---- Frames
+
+type Ctor = abstract new (...args: never[]) => unknown;
+/** instanceof that also knows nodes from a same-origin iframe, built from that frame's own classes. */
+function isA<C extends Ctor>(node: unknown, ctor: C): node is InstanceType<C> {
+  if (node instanceof ctor) return true;
+  const view = (node as Node | null)?.ownerDocument?.defaultView as
+    | (Window & Record<string, unknown>)
+    | null
+    | undefined;
+  const own = view && (view as unknown) !== window ? view[ctor.name] : undefined;
+  return typeof own === 'function' && node instanceof (own as C);
+}
+/** A same-origin iframe's document; null for cross-origin or unloaded frames. */
+function frameDocument(el: Element) {
+  if (!isA(el, HTMLIFrameElement)) return null;
+  try {
+    return el.contentDocument?.body ? el.contentDocument : null;
+  } catch {
+    return null;
+  }
+}
 
 // ---- Colours
 
@@ -163,6 +189,14 @@ function splitTop(value: string, separator = ',') {
 const COLOR =
   /(rgba?|oklch|oklab|lab|lch|hsla?|color)\([^)]*\)|#[0-9a-f]{3,8}\b|\b(transparent|white|black)\b/i;
 
+/** filter: drop-shadow(…) as shadows, so a cut-out image keeps its own. */
+function dropShadows(value: string): Shadow[] {
+  if (!value || value === 'none') return [];
+  return [...value.matchAll(/drop-shadow\(((?:[^()]|\([^)]*\))*)\)/g)].flatMap(
+    (m) => shadows(m[1]),
+  );
+}
+
 function shadows(value: string): Shadow[] {
   if (!value || value === 'none') return [];
   const out: Shadow[] = [];
@@ -229,6 +263,230 @@ function gradients(value: string): Grad[] {
   return out;
 }
 
+// ---- Backgrounds SVG can't carry as vectors
+//
+// url() images and radial gradients (dot grids, patterned tiles) are drawn
+// into one image per element, tiled the way CSS tiles them, and copied as an
+// image layer of their own. Linear gradients stay vectors unless they share a
+// stack with one of these.
+
+const RASTER = /url\(|radial-gradient\(/;
+const bgImages = new Map<string, HTMLImageElement | null>();
+const urlsIn = (value: string) =>
+  [...value.matchAll(/url\((?:"([^"]*)"|'([^']*)'|([^)]*))\)/g)].map(
+    (m) => m[1] ?? m[2] ?? m[3],
+  );
+
+/** Every url() background in the section, decoded, so copying can draw them synchronously. */
+async function loadBackgrounds(el: Element) {
+  const urls = new Set<string>();
+  const nodes: Element[] = [el, ...el.querySelectorAll('*')];
+  for (const node of nodes) {
+    if (node.matches(SKIP)) continue;
+    const doc = frameDocument(node);
+    if (doc) nodes.push(...doc.documentElement.querySelectorAll('*'));
+    for (const pseudo of [null, '::before', '::after'])
+      for (const url of urlsIn(getComputedStyle(node, pseudo).backgroundImage))
+        urls.add(url);
+  }
+  await Promise.all(
+    [...urls]
+      .filter((url) => !bgImages.has(url))
+      .map(async (url) => {
+        const img = new Image();
+        img.src = url;
+        try {
+          await Promise.race([img.decode(), new Promise((_, reject) => setTimeout(() => reject(new Error('Image timed out')), 5000))]);
+          bgImages.set(url, img);
+        } catch {
+          bgImages.set(url, null);
+          captureWarnings.add('Some background images could not be read.');
+        }
+      }),
+  );
+}
+
+/** One axis of a background size or position: px, %, or null for auto. */
+function length(value: string | undefined, of: number) {
+  if (!value || value === 'auto') return null;
+  return value.endsWith('%') ? (parseFloat(value) / 100) * of : px(value);
+}
+
+function tileSize(size: string, w: number, h: number, nw: number, nh: number) {
+  if (size === 'cover' || size === 'contain') {
+    const scale = (size === 'cover' ? Math.max : Math.min)(w / nw, h / nh);
+    return [nw * scale, nh * scale];
+  }
+  const [a, b] = size.split(' ');
+  let tw = length(a, w);
+  let th = length(b ?? 'auto', h);
+  if (tw === null && th === null) return [nw, nh];
+  tw ??= ((th as number) * nw) / nh;
+  th ??= (tw * nh) / nw;
+  return [tw, th];
+}
+
+/** A radial gradient drawn into a tile, as CSS sizes and places it. */
+function radialTile(layer: string, tw: number, th: number, scale: number) {
+  const inner = layer.match(/^radial-gradient\((.*)\)$/)?.[1];
+  if (!inner) return null;
+  const parts = splitTop(inner);
+  let config = '';
+  if (!COLOR.test(parts[0]) || /^(circle|ellipse|closest|farthest|at )/.test(parts[0]))
+    config = parts.shift() as string;
+  const at = config.match(/at (\S+)(?: (\S+))?/);
+  const cx = length(at?.[1] ?? '50%', tw) ?? tw / 2;
+  const cy = length(at?.[2] ?? at?.[1] ?? '50%', th) ?? th / 2;
+  const sides = [cx, tw - cx, cy, th - cy].map(Math.abs);
+  const sizeWord = config.match(/(closest|farthest)-(side|corner)/)?.[0] ?? 'farthest-corner';
+  const pickX = sizeWord.startsWith('closest') ? Math.min(sides[0], sides[1]) : Math.max(sides[0], sides[1]);
+  const pickY = sizeWord.startsWith('closest') ? Math.min(sides[2], sides[3]) : Math.max(sides[2], sides[3]);
+  const explicit = [...config.replace(/at .*/, '').matchAll(/-?[\d.]+(px|%)/g)].map((m) =>
+    length(m[0], tw) ?? 0,
+  );
+  const circle = /circle/.test(config) || explicit.length === 1;
+  let rx: number;
+  let ry: number;
+  if (explicit.length) [rx, ry] = [explicit[0], explicit[1] ?? explicit[0]];
+  else if (circle) {
+    const side = sizeWord.endsWith('side')
+      ? (sizeWord.startsWith('closest') ? Math.min : Math.max)(...sides)
+      : Math.hypot(pickX, pickY);
+    rx = ry = side;
+  } else {
+    const k = sizeWord.endsWith('corner') ? Math.SQRT2 : 1;
+    [rx, ry] = [pickX * k, pickY * k];
+  }
+  if (!rx || !ry) return null;
+  const stops = parts.map((part, i) => {
+    const color = part.match(COLOR)?.[0] ?? part;
+    const at = part.replace(color, '').trim().split(/\s+/)[0];
+    const c: RGBA4 = toRgba(color) ?? [0, 0, 0, 0];
+    const p = at
+      ? at.endsWith('%')
+        ? parseFloat(at) / 100
+        : px(at) / rx
+      : i / (parts.length - 1 || 1);
+    return { c, p };
+  });
+  stops.forEach((stop, i) => {
+    stop.p = Math.min(1, Math.max(stop.p, stops[i - 1]?.p ?? 0, 0));
+    if (stop.c[3] > 0) return;
+    const near = stops[i + 1]?.c[3] ? stops[i + 1] : stops[i - 1];
+    if (near) stop.c = [near.c[0], near.c[1], near.c[2], 0];
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(tw * scale));
+  canvas.height = Math.max(1, Math.round(th * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.scale(scale, scale);
+  // An ellipse is a circle squashed on y.
+  ctx.translate(cx, cy);
+  ctx.scale(1, ry / rx);
+  const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+  for (const s of stops)
+    grad.addColorStop(s.p, `rgba(${s.c[0]},${s.c[1]},${s.c[2]},${s.c[3]})`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(-cx, (-cy * rx) / ry, tw, (th * rx) / ry);
+  return canvas;
+}
+
+/** A linear gradient drawn into a tile (only when it sits in a stack with raster layers). */
+function linearTile(layer: string, tw: number, th: number, scale: number) {
+  const [grad] = gradients(layer);
+  if (!grad) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(tw * scale));
+  canvas.height = Math.max(1, Math.round(th * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.scale(scale, scale);
+  const g = ctx.createLinearGradient(grad.x1 * tw, grad.y1 * th, grad.x2 * tw, grad.y2 * th);
+  for (const s of grad.stops)
+    g.addColorStop(Math.min(1, Math.max(0, s.p)), `rgba(${s.c[0]},${s.c[1]},${s.c[2]},${s.c[3]})`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, tw, th);
+  return canvas;
+}
+
+/**
+ * The element's background-image stack as one PNG, tiled and placed as CSS
+ * draws it; null when it has nothing SVG can't already carry.
+ */
+/** Pixels drawn per CSS pixel: 2 on the page, less inside a shrunk iframe. */
+let density = 2;
+
+function rasterBackground(cs: CSSStyleDeclaration, w: number, h: number) {
+  const value = cs.backgroundImage;
+  if (!value || value === 'none' || !RASTER.test(value) || w < 1 || h < 1) return null;
+  const scale = density;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(w * scale);
+  canvas.height = Math.ceil(h * scale);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.scale(scale, scale);
+  const layers = splitTop(value);
+  const sizes = splitTop(cs.backgroundSize);
+  const positions = splitTop(cs.backgroundPosition);
+  const repeats = splitTop(cs.backgroundRepeat);
+  const pick = (list: string[], i: number, fallback: string) =>
+    list[i % (list.length || 1)] ?? fallback;
+  let drew = false;
+  // CSS lists the top layer first; paint from the bottom up.
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const layer = layers[i];
+    const size = pick(sizes, i, 'auto');
+    let tile: CanvasImageSource | null = null;
+    let tw: number;
+    let th: number;
+    if (layer.startsWith('url(')) {
+      const img = bgImages.get(urlsIn(layer)[0]);
+      if (!img?.naturalWidth) continue;
+      [tw, th] = tileSize(size, w, h, img.naturalWidth, img.naturalHeight);
+      tile = img;
+    } else {
+      [tw, th] = tileSize(size, w, h, w, h);
+      tile = layer.startsWith('radial-gradient(')
+        ? radialTile(layer, tw, th, scale)
+        : layer.startsWith('linear-gradient(')
+          ? linearTile(layer, tw, th, scale)
+          : null;
+    }
+    if (!tile || tw < 0.5 || th < 0.5) continue;
+    const [posX = '0%', posY = posX] = pick(positions, i, '0% 0%').split(' ');
+    const x0 = posX.endsWith('%') ? ((w - tw) * parseFloat(posX)) / 100 : px(posX);
+    const y0 = posY.endsWith('%') ? ((h - th) * parseFloat(posY)) / 100 : px(posY);
+    const repeat = pick(repeats, i, 'repeat');
+    const [repX, repY] =
+      repeat === 'repeat-x'
+        ? ['repeat', 'no-repeat']
+        : repeat === 'repeat-y'
+          ? ['no-repeat', 'repeat']
+          : [repeat.split(' ')[0], repeat.split(' ')[1] ?? repeat.split(' ')[0]];
+    const xs: number[] = [];
+    const ys: number[] = [];
+    if (repX === 'no-repeat') xs.push(x0);
+    else for (let x = (x0 % tw) - (x0 % tw > 0 ? tw : 0); x < w; x += tw) xs.push(x);
+    if (repY === 'no-repeat') ys.push(y0);
+    else for (let y = (y0 % th) - (y0 % th > 0 ? th : 0); y < h; y += th) ys.push(y);
+    if (xs.length * ys.length > 40000) continue;
+    try {
+      for (const x of xs) for (const y of ys) ctx.drawImage(tile, x, y, tw, th);
+      drew = true;
+    } catch {
+      // An image that won't draw (broken, or cross-origin SVG) is left out.
+    }
+  }
+  if (!drew) return null;
+  try {
+    return canvas.toDataURL('image/png');
+  } catch {
+    return null; // A cross-origin image tainted the canvas.
+  }
+}
+
 // ---- Names and components
 
 type Fiber = {
@@ -291,8 +549,14 @@ function layerName(el: Element) {
     (c) => !/^(motion|m|Motion)/.test(c.name),
   );
   if (component) return component.name;
-  const label = el.getAttribute('aria-label');
+  const label = el.getAttribute('aria-label') ?? el.getAttribute('data-name');
   if (label) return label;
+  // Images by their alt text or file name ("camera"), not all "img".
+  if (isA(el, HTMLImageElement)) {
+    const file = (el.currentSrc || el.src).split(/[?#]/)[0].split('/').pop();
+    const stem = el.src.startsWith('data:') ? '' : decodeURIComponent(file ?? '').replace(/\.\w+$/, '');
+    if (el.alt || stem) return el.alt || stem;
+  }
   return el.tagName.toLowerCase();
 }
 
@@ -404,7 +668,7 @@ function expandPatterns(
   target.forEach((out, i) => {
     const id = out.getAttribute('fill')?.match(/^url\(#(.+)\)$/)?.[1];
     const node = source[i];
-    if (!id || !(node instanceof SVGGeometryElement)) return;
+    if (!id || !(isA(node, SVGGeometryElement))) return;
     const pattern = [...el.querySelectorAll('pattern')].find(
       (p) => p.id === id,
     );
@@ -446,7 +710,7 @@ function expandPatterns(
     const tiles = [...copy.children];
     const rules = tiles.every(
       (t) =>
-        t instanceof SVGLineElement &&
+        isA(t, SVGLineElement) &&
         t.getAttribute('x1') === t.getAttribute('x2') &&
         parseFloat(t.getAttribute('y1') ?? '0') <= 0 &&
         parseFloat(t.getAttribute('y2') ?? '0') >= h,
@@ -540,8 +804,8 @@ function svgLayer(
     if (seen.has(id)) continue;
     seen.add(id);
     if ([...clone.querySelectorAll('[id]')].some((n) => n.id === id)) continue;
-    const found = document.getElementById(id);
-    if (!found || !(found instanceof SVGElement)) continue;
+    const found = el.ownerDocument.getElementById(id);
+    if (!found || !(isA(found, SVGElement))) continue;
     const copy = found.cloneNode(true) as SVGElement;
     const from = [found, ...found.querySelectorAll('*')];
     const to = [copy, ...copy.querySelectorAll('*')];
@@ -653,7 +917,7 @@ function paintSvgNode(node: Element, out: Element) {
     }
   }
   // Gradient stops styled with variables keep their resolved colour.
-  if (node instanceof SVGStopElement) {
+  if (isA(node, SVGStopElement)) {
     const c = toRgba(cs.stopColor);
     const stopOpacity = parseFloat(cs.stopOpacity);
     out.setAttribute(
@@ -704,7 +968,7 @@ function rotation(el: Element) {
   let deg = 0;
   for (
     let node: Element | null = el;
-    node && node !== document.body;
+    node && node !== node.ownerDocument.body;
     node = node.parentElement
   ) {
     const cs = getComputedStyle(node);
@@ -733,7 +997,7 @@ function imageData(el: HTMLImageElement, w: number, h: number) {
   if (!el.complete || !el.naturalWidth) return null;
   const scale = Math.min(
     1,
-    (Math.max(w, h) * 2) / Math.max(el.naturalWidth, el.naturalHeight),
+    (Math.max(w, h) * density) / Math.max(el.naturalWidth, el.naturalHeight),
   );
   const width = Math.max(1, Math.round(el.naturalWidth * scale));
   const height = Math.max(1, Math.round(el.naturalHeight * scale));
@@ -797,13 +1061,13 @@ function imageLayer(el: HTMLImageElement, cs: CSSStyleDeclaration): Img | null {
 function children(el: Element): Node[] {
   const out: Node[] = [];
   const assigned =
-    el instanceof HTMLSlotElement ? el.assignedNodes({ flatten: true }) : [];
+    isA(el, HTMLSlotElement) ? el.assignedNodes({ flatten: true }) : [];
   const own =
     el.shadowRoot?.childNodes ??
     (assigned.length > 0 ? assigned : el.childNodes);
   for (const child of own) {
     if (
-      child instanceof Element &&
+      isA(child, Element) &&
       getComputedStyle(child).display === 'contents'
     )
       out.push(...children(child));
@@ -877,24 +1141,17 @@ function flexLayout(
   };
 }
 
-function elementLayer(el: Element, origin: DOMRect, ctx: Ctx): Layer | null {
-  if (ctx.count >= ctx.max) return null;
-  const cs = getComputedStyle(el);
-  if (!visible(el, cs)) return null;
-  if (el instanceof SVGSVGElement) return svgLayer(el, origin, ctx);
-  if (el instanceof SVGGraphicsElement && el.ownerSVGElement)
-    return svgLayer(el.ownerSVGElement, origin, ctx, el);
-  if (!(el instanceof HTMLElement)) return null;
-  const { x, y, w, h, rect } = box(el, origin);
-  ctx.count++;
-
-  const layer: Layer = { t: 'frame', n: layerName(el), x, y, w, h };
-  if (/absolute|fixed/.test(cs.position)) layer.abs = true;
-  const opacity = px(cs.opacity);
-  if (cs.opacity !== '' && opacity < 1) layer.o = opacity;
+/**
+ * A box's own paint onto its layer: fill, gradients, border, corners and
+ * shadows. Backgrounds SVG can't carry come back as an image layer to put
+ * under its children.
+ */
+function paintBox(layer: Layer, cs: CSSStyleDeclaration): Layer | null {
+  const { w, h } = layer;
   const fill = toRgba(cs.backgroundColor);
   if (fill) layer.fill = fill;
-  const bg = gradients(cs.backgroundImage);
+  const raster = rasterBackground(cs, w, h);
+  const bg = raster ? [] : gradients(cs.backgroundImage);
   if (bg.length) layer.bg = bg;
   const borders: Sides = [
     px(cs.borderTopWidth),
@@ -939,6 +1196,135 @@ function elementLayer(el: Element, origin: DOMRect, ctx: Ctx): Layer | null {
   if (radii.some((r) => r > 0)) layer.r = radii;
   const fx = shadows(cs.boxShadow);
   if (fx.length) layer.fx = fx;
+  if (!raster) return null;
+  return {
+    t: 'frame',
+    n: 'Background',
+    x: 0,
+    y: 0,
+    w,
+    h,
+    abs: true,
+    ...(layer.r && { r: layer.r }),
+    img: { src: raster, w, h, rot: 0, fit: 'fill', align: 'xMidYMid' },
+  };
+}
+
+/**
+ * A positioned ::before or ::after (a handle, a badge dot, an overlay) as a
+ * box of its own. Unpositioned ones sit in the text flow and can't be placed
+ * without layout, so they're left out.
+ */
+function pseudoLayer(el: HTMLElement, which: '::before' | '::after'): Layer[] {
+  const ps = getComputedStyle(el, which);
+  if (
+    ps.content === 'none' ||
+    ps.content === 'normal' ||
+    ps.display === 'none' ||
+    ps.visibility === 'hidden' ||
+    ps.opacity === '0' ||
+    ps.position !== 'absolute'
+  )
+    return [];
+  const w = px(ps.width);
+  const h = px(ps.height);
+  if (!w || !h) return [];
+  const parent = getComputedStyle(el);
+  const layer: Layer = {
+    t: 'frame',
+    n: which.slice(2),
+    x: round(px(parent.borderLeftWidth) + px(ps.left) + px(ps.marginLeft)),
+    y: round(px(parent.borderTopWidth) + px(ps.top) + px(ps.marginTop)),
+    w: round(w),
+    h: round(h),
+    abs: true,
+  };
+  const opacity = px(ps.opacity);
+  if (ps.opacity !== '' && opacity < 1) layer.o = opacity;
+  const background = paintBox(layer, ps);
+  if (background) layer.kids = [background];
+  return layer.fill || layer.bg || layer.stroke || layer.fx || layer.kids ? [layer] : [];
+}
+
+/**
+ * An element turned with transform or rotate is measured unturned (its
+ * children with it) and copied with its angle, so Figma gets a rotated frame
+ * rather than a bigger upright one. The page is put back straight after.
+ */
+function unturn(el: Element) {
+  const none = { deg: 0, restore: () => {} };
+  if (!(isA(el, HTMLElement))) return none;
+  const cs = getComputedStyle(el);
+  let deg = 0;
+  const undo: (() => void)[] = [];
+  const hold = (prop: string, value: string) => {
+    const prev = el.style.getPropertyValue(prop);
+    const priority = el.style.getPropertyPriority(prop);
+    el.style.setProperty(prop, value, 'important');
+    undo.push(() =>
+      prev ? el.style.setProperty(prop, prev, priority) : el.style.removeProperty(prop),
+    );
+  };
+  if (cs.rotate && cs.rotate !== 'none') {
+    const angle = cs.rotate.split(' ').pop() ?? '';
+    const own = angle.endsWith('rad')
+      ? (parseFloat(angle) * 180) / Math.PI
+      : angle.endsWith('turn')
+        ? parseFloat(angle) * 360
+        : parseFloat(angle) || 0;
+    if (own) {
+      deg += own;
+      hold('rotate', 'none');
+    }
+  }
+  if (cs.transform && cs.transform !== 'none') {
+    const m = new DOMMatrix(cs.transform);
+    const own = (Math.atan2(m.b, m.a) * 180) / Math.PI;
+    if (Math.abs(own) > 0.01 && m.is2D) {
+      deg += own;
+      // Same translate and scale, minus the turn.
+      hold('transform', m.rotate(-own).toString());
+    }
+  }
+  if (!undo.length) return none;
+  return { deg: round(deg), restore: () => undo.reverse().forEach((f) => f()) };
+}
+
+function elementLayer(el: Element, origin: DOMRect, ctx: Ctx): Layer | null {
+  const before = el.getBoundingClientRect();
+  const turn = unturn(el);
+  try {
+    const layer = buildLayer(el, origin, ctx);
+    if (layer && turn.deg) {
+      // Turned about its own centre, which the browser may have put elsewhere.
+      const after = el.getBoundingClientRect();
+      layer.x = round(layer.x + (before.left + before.width / 2) - (after.left + after.width / 2));
+      layer.y = round(layer.y + (before.top + before.height / 2) - (after.top + after.height / 2));
+      layer.rot = round((layer.rot ?? 0) + turn.deg);
+    }
+    return layer;
+  } finally {
+    turn.restore();
+  }
+}
+
+function buildLayer(el: Element, origin: DOMRect, ctx: Ctx): Layer | null {
+  if (ctx.count >= ctx.max) { captureWarnings.add('The layer limit was reached; export smaller sections for a complete copy.'); return null; }
+  const cs = getComputedStyle(el);
+  if (!visible(el, cs)) return null;
+  if (isA(el, SVGSVGElement)) return svgLayer(el, origin, ctx);
+  if (isA(el, SVGGraphicsElement) && el.ownerSVGElement)
+    return svgLayer(el.ownerSVGElement, origin, ctx, el);
+  if (!(isA(el, HTMLElement))) return null;
+  const { x, y, w, h, rect } = box(el, origin);
+  ctx.count++;
+
+  const layer: Layer = { t: 'frame', n: layerName(el), x, y, w, h };
+  if (/absolute|fixed/.test(cs.position)) layer.abs = true;
+  const opacity = px(cs.opacity);
+  if (cs.opacity !== '' && opacity < 1) layer.o = opacity;
+  const background = paintBox(layer, cs);
+  const radii = layer.r ?? [0, 0, 0, 0];
   // Clip only what really spills, or rounds its children's corners: text a
   // touch wider in Figma's font rendering shouldn't get cut off.
   const spills =
@@ -948,19 +1334,29 @@ function elementLayer(el: Element, origin: DOMRect, ctx: Ctx): Layer | null {
   if (cs.overflow !== 'visible' && cs.overflow !== '' && (spills || rounds))
     layer.clip = true;
 
-  const kids: Layer[] = [];
+  const kids: Layer[] = background ? [background] : [];
+  kids.push(...pseudoLayer(el, '::before'));
   const elementKids: HTMLElement[] = [];
-  for (const child of children(el)) {
+  // Siblings stack by z-index (positioned ones), then source order, as the
+  // browser paints them: an object behind a card stays behind it.
+  const stacked: { kid: Layer; z: number; i: number }[] = [];
+  children(el).forEach((child, i) => {
     let kid: Layer | null = null;
-    if (child instanceof Text) kid = textLayer(child, el, rect, ctx);
-    else if (child instanceof Element) {
+    let z = 0;
+    if (isA(child, Text)) kid = textLayer(child, el, rect, ctx);
+    else if (isA(child, Element)) {
       kid = elementLayer(child, rect, ctx);
-      if (kid && child instanceof HTMLElement) elementKids.push(child);
+      if (kid && isA(child, HTMLElement)) elementKids.push(child);
+      const kcs = getComputedStyle(child);
+      if (kcs.position !== 'static' && kcs.zIndex !== 'auto') z = parseInt(kcs.zIndex, 10) || 0;
     }
-    if (kid) kids.push(kid);
-  }
+    if (kid) stacked.push({ kid, z, i });
+  });
+  stacked.sort((a, b) => a.z - b.z || a.i - b.i);
+  kids.push(...stacked.map((s) => s.kid));
+  kids.push(...pseudoLayer(el, '::after'));
   // Form fields draw their text outside the DOM.
-  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+  if (isA(el, HTMLInputElement) || isA(el, HTMLTextAreaElement)) {
     const value = el.value || el.placeholder;
     if (value && !/checkbox|radio|range|color|file/.test(el.type)) {
       const color = el.value
@@ -980,9 +1376,33 @@ function elementLayer(el: Element, origin: DOMRect, ctx: Ctx): Layer | null {
       });
     }
   }
-  if (el instanceof HTMLImageElement) {
+  // A same-origin iframe brings its page along, scaled to the frame's box.
+  const doc = frameDocument(el);
+  if (el.tagName === 'IFRAME' && !doc) captureWarnings.add('A protected embedded frame was omitted.');
+  if (el.matches('canvas,video')) captureWarnings.add('Canvas and video content is not included in editable SVG exports.');
+  const inner = doc && pageRoot(doc);
+  if (inner) {
+    const s = el.clientWidth ? w / el.clientWidth : 1;
+    const outer = density;
+    density = Math.min(outer, outer * s);
+    let page: Layer | null = null;
+    try {
+      page = elementLayer(inner, new DOMRect(), ctx);
+    } finally {
+      density = outer;
+    }
+    if (page) {
+      kids.push(scaleLayer(page, s));
+      layer.clip = true;
+    }
+  }
+  if (isA(el, HTMLImageElement)) {
     const img = imageLayer(el, cs);
+    if (!img) captureWarnings.add('Some images could not be read and appear as placeholders.');
     if (img) layer.img = img;
+    // A cut-out's filter: drop-shadow follows its outline.
+    const drops = dropShadows(cs.filter);
+    if (img && drops.length) layer.fx = [...(layer.fx ?? []), ...drops];
     else if (!layer.fill) layer.fill = [0, 0, 0, 0.06];
   }
 
@@ -1011,6 +1431,34 @@ function elementLayer(el: Element, origin: DOMRect, ctx: Ctx): Layer | null {
   return layer;
 }
 
+/** The layer at s times its size: an iframe's page shrunk into its thumbnail. */
+function scaleLayer(layer: Layer, s: number): Layer {
+  if (s === 1) return layer;
+  const k = (v: number) => round(v * s);
+  const out: Layer = { ...layer, x: k(layer.x), y: k(layer.y), w: k(layer.w), h: k(layer.h) };
+  if (layer.r) out.r = layer.r.map(k) as Sides;
+  if (layer.stroke) out.stroke = { ...layer.stroke, w: layer.stroke.w.map(k) as Sides };
+  if (layer.fx)
+    out.fx = layer.fx.map((f) => ({ ...f, x: k(f.x), y: k(f.y), blur: k(f.blur), spread: k(f.spread) }));
+  if (layer.font)
+    out.font = {
+      ...layer.font,
+      size: k(layer.font.size),
+      lh: layer.font.lh === null ? null : k(layer.font.lh),
+      ls: k(layer.font.ls),
+    };
+  if (layer.layout)
+    out.layout = { ...layer.layout, gap: k(layer.layout.gap), pad: layer.layout.pad.map(k) as Sides };
+  if (layer.img) out.img = { ...layer.img, w: k(layer.img.w), h: k(layer.img.h) };
+  if (layer.svg)
+    out.svg = layer.svg.replace(
+      /^<svg\b([^>]*)>/,
+      (tag) => tag.replace(/\swidth="[^"]*"/, ` width="${out.w}"`).replace(/\sheight="[^"]*"/, ` height="${out.h}"`),
+    );
+  if (layer.kids) out.kids = layer.kids.map((kid) => scaleLayer(kid, s));
+  return out;
+}
+
 function serialize(el: Element, max = MAX_LAYERS, label?: string) {
   const ctx: Ctx = { count: 0, max };
   const origin = el.getBoundingClientRect();
@@ -1024,7 +1472,8 @@ function serialize(el: Element, max = MAX_LAYERS, label?: string) {
   return {
     payload: {
       kind: 'prototype-section',
-      v: 1,
+      // 2: layers can carry rot (x/y/w/h are then the unturned box).
+      v: 2,
       source: location.href,
       name,
       root,
@@ -1035,13 +1484,13 @@ function serialize(el: Element, max = MAX_LAYERS, label?: string) {
 }
 
 // The app's own root under <body>: the whole page, its nav and top bar
-// included, without the portals for these tools.
-function pageRoot() {
-  return (
-    [...document.body.children].find(
-      (el) => !el.matches(SKIP) && el.getBoundingClientRect().height > 0,
-    ) ?? null
+// included, without the portals for these tools. A page with several
+// top-level blocks (a header over a grid) is the body itself.
+function pageRoot(doc: Document = document) {
+  const roots = [...doc.body.children].filter(
+    (el) => !el.matches(SKIP) && el.getBoundingClientRect().height > 0,
   );
+  return roots.length > 1 ? doc.body : (roots[0] ?? null);
 }
 
 // ---- SVG, for pasting straight onto the Figma canvas
@@ -1120,32 +1569,38 @@ const tint = (c: RGBA4) =>
   `<feColorMatrix type="matrix" values="0 0 0 0 ${round(c[0] / 255)} 0 0 0 0 ${round(c[1] / 255)} 0 0 0 0 ${round(c[2] / 255)} 0 0 0 ${round(c[3])} 0"/>`;
 
 /** Box shadows as a filter in the shape Figma exports, so it reads them back as effects. */
-function svgShadows(fx: Shadow[], w: number, h: number, defs: string[]) {
+function svgShadows(all: Shadow[], w: number, h: number, defs: string[]) {
   const id = `fx${defs.length}`;
+  // Written the way Figma writes its own effects, which is all its SVG import
+  // reads reliably: tested, a drop shadow cut out with feComposite comes in as
+  // an inner shadow, an inner one without a blur step or with feMorphology
+  // comes in as a drop, and spread is never read. So spread is folded away:
+  // a shadow pulled in by negative spread (a tight glow under a pill) is faded
+  // by how much of its blur the spread would have eaten, or it swells into a
+  // halo; an inner one only thickens, so it just softens.
+  const fx = all.map((s) =>
+    s.spread < 0
+      ? {
+          ...s,
+          spread: 0,
+          c: [s.c[0], s.c[1], s.c[2], round(s.c[3] * (s.inset ? 0.75 : Math.max(0.35, 1 + (2 * s.spread) / Math.max(s.blur, 1))))] as RGBA4,
+        }
+      : { ...s, spread: 0 },
+  );
   const pad =
-    Math.max(
-      ...fx.map(
-        (s) =>
-          s.blur + Math.abs(s.spread) + Math.max(Math.abs(s.x), Math.abs(s.y)),
-      ),
-    ) + 2;
+    Math.max(...fx.map((s) => s.blur + Math.max(Math.abs(s.x), Math.abs(s.y)))) + 2;
   // CSS paints the first shadow on top; Figma stacks effects bottom-up.
   const drops = fx.filter((s) => !s.inset).reverse();
   const inner = fx.filter((s) => s.inset).reverse();
+  const step = (s: Shadow) =>
+    HARD_ALPHA +
+    `<feOffset dx="${s.x}" dy="${s.y}"/>` +
+    `<feGaussianBlur stdDeviation="${round(s.blur / 2)}"/>`;
   let last = 'BackgroundImageFix';
   let body = '<feFlood flood-opacity="0" result="BackgroundImageFix"/>';
   drops.forEach((s, i) => {
     const result = `effect${i + 1}_dropShadow`;
-    body +=
-      HARD_ALPHA +
-      (s.spread
-        ? `<feMorphology radius="${Math.abs(s.spread)}" operator="${s.spread > 0 ? 'dilate' : 'erode'}" in="SourceAlpha" result="${result}"/>`
-        : '') +
-      `<feOffset dx="${s.x}" dy="${s.y}"/>` +
-      (s.blur ? `<feGaussianBlur stdDeviation="${round(s.blur / 2)}"/>` : '') +
-      '<feComposite in2="hardAlpha" operator="out"/>' +
-      tint(s.c) +
-      `<feBlend mode="normal" in2="${last}" result="${result}"/>`;
+    body += step(s) + tint(s.c) + `<feBlend mode="normal" in2="${last}" result="${result}"/>`;
     last = result;
   });
   body += `<feBlend mode="normal" in="SourceGraphic" in2="${last}" result="shape"/>`;
@@ -1153,12 +1608,7 @@ function svgShadows(fx: Shadow[], w: number, h: number, defs: string[]) {
   inner.forEach((s, i) => {
     const result = `effect${drops.length + i + 1}_innerShadow`;
     body +=
-      HARD_ALPHA +
-      (s.spread
-        ? `<feMorphology radius="${Math.abs(s.spread)}" operator="erode" in="SourceAlpha" result="${result}"/>`
-        : '') +
-      `<feOffset dx="${s.x}" dy="${s.y}"/>` +
-      (s.blur ? `<feGaussianBlur stdDeviation="${round(s.blur / 2)}"/>` : '') +
+      step(s) +
       '<feComposite in2="hardAlpha" operator="arithmetic" k2="-1" k3="1"/>' +
       tint(s.c) +
       `<feBlend mode="normal" in2="${last}" result="${result}"/>`;
@@ -1176,9 +1626,9 @@ function svgBox(layer: Layer, defs: string[]) {
   const rx = radius ? ` rx="${round(radius)}"` : '';
   let out = '';
   // Gradient backgrounds, bottom layer first, over the background colour.
-  let paint = fill
-    ? `<rect width="${round(w)}" height="${round(h)}"${rx} ${paintAttr('fill', fill)}/>`
-    : '';
+  const paints: string[] = fill
+    ? [`<rect width="${round(w)}" height="${round(h)}"${rx} ${paintAttr('fill', fill)}/>`]
+    : [];
   for (const grad of [...(bg ?? [])].reverse()) {
     const id = `bg${defs.length}`;
     const stops = grad.stops
@@ -1190,11 +1640,14 @@ function svgBox(layer: Layer, defs: string[]) {
     defs.push(
       `<linearGradient id="${id}" x1="${grad.x1}" y1="${grad.y1}" x2="${grad.x2}" y2="${grad.y2}">${stops}</linearGradient>`,
     );
-    paint += `<rect width="${round(w)}" height="${round(h)}"${rx} fill="url(#${id})"/>`;
+    paints.push(`<rect width="${round(w)}" height="${round(h)}"${rx} fill="url(#${id})"/>`);
   }
-  if (paint && fx?.length)
-    out += `<g filter="url(#${svgShadows(fx, w, h, defs)})">${paint}</g>`;
-  else out += paint;
+  // The shadows ride on the top paint alone: Figma drops a shadow's spread
+  // when it lands on a group of several, so a tight glow swells into a halo.
+  const top = paints.pop();
+  out += paints.join('');
+  if (top && fx?.length) out += `<g filter="url(#${svgShadows(fx, w, h, defs)})">${top}</g>`;
+  else if (top) out += top;
   const even = stroke && stroke.w.every((width) => width === stroke.w[0]);
   if (even) {
     const inset = stroke.w[0] / 2;
@@ -1226,7 +1679,8 @@ function svgBox(layer: Layer, defs: string[]) {
 function svgLayerMarkup(layer: Layer, clips: string[]): string {
   // Screen-reader-only copies (1px clipped boxes) aren't visible on the page.
   if (layer.clip && layer.w <= 1 && layer.h <= 1) return '';
-  const open = `<g id="${esc(layer.comp?.name ?? layer.n)}" transform="translate(${round(layer.x)} ${round(layer.y)})"${layer.o !== undefined && layer.o < 1 ? ` opacity="${round(layer.o)}"` : ''}>`;
+  const turn = layer.rot ? ` rotate(${layer.rot} ${round(layer.w / 2)} ${round(layer.h / 2)})` : '';
+  const open = `<g id="${esc(layer.comp?.name ?? layer.n)}" transform="translate(${round(layer.x)} ${round(layer.y)})${turn}"${layer.o !== undefined && layer.o < 1 ? ` opacity="${round(layer.o)}"` : ''}>`;
   if (layer.t === 'text') return `${open}${svgText(layer)}</g>`;
   if (layer.t === 'svg')
     return `${open}${(layer.svg ?? '').replace(/^<svg\b/, '<svg x="0" y="0"')}</g>`;
@@ -1270,7 +1724,12 @@ function svgImage(layer: Layer, clips: string[]) {
   const turn = img.rot
     ? ` transform="rotate(${img.rot} ${round(layer.w / 2)} ${round(layer.h / 2)})"`
     : '';
-  return `<g${turn}><image x="${x}" y="${y}" width="${round(img.w)}" height="${round(img.h)}" preserveAspectRatio="${ratio}" href="${img.src}"${clip}/></g>`;
+  // Its drop shadows hug the image's alpha; a box's own shadows are drawn by svgBox.
+  const shadow =
+    layer.fx?.length && !layer.fill && !layer.bg
+      ? ` filter="url(#${svgShadows(layer.fx, layer.w, layer.h, clips)})"`
+      : '';
+  return `<g${turn}${shadow}><image x="${x}" y="${y}" width="${round(img.w)}" height="${round(img.h)}" preserveAspectRatio="${ratio}" href="${img.src}"${clip}/></g>`;
 }
 
 function toBase64(text: string) {
@@ -1309,23 +1768,38 @@ export function CopyToFigma() {
     name: string;
     count: number;
   } | null>(null);
+  const [message, setMessage] = React.useState('');
+  const [exported, setExported] = React.useState<string | null>(null);
+  const busy = React.useRef(false);
   const hoveredRef = React.useRef<Element | null>(null);
   hoveredRef.current = hovered;
   const copy = React.useCallback(
-    (el: Element, max?: number, label?: string) => {
-      const result = serialize(el, max, label);
-      if (!result) return;
-      void writeClipboard(toSvg(result.payload)).then(() => {
-        setCopied({ name: result.name, count: result.count });
-        setTimeout(() => setCopied(null), 4000);
-      });
+    async (el: Element, max?: number, label?: string) => {
+      if (busy.current) return;
+      busy.current = true;
+      setCopied(null);
+      setExported(null);
+      setMessage('Preparing SVG…');
+      captureWarnings.clear();
+      try {
+        await loadBackgrounds(el);
+        const result = serialize(el, max, label);
+        if (!result) throw new Error('No visible content to export. Pick a visible section.');
+        const svg = toSvg(result.payload);
+        setExported(svg);
+        const ok = await writeClipboard(svg);
+        if (ok) setCopied({ name: result.name, count: result.count });
+        setMessage([ok ? '' : 'Clipboard unavailable. Download SVG and import it into Figma.', ...captureWarnings].filter(Boolean).join(' '));
+      } catch (error) {
+        setMessage(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
+      } finally { busy.current = false; }
     },
     [],
   );
 
   // Pick mode: hover outlines an element, ↑ widens to its parent, a click
   // copies it without reaching the page, Escape stops picking.
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!picking) return;
     const inTool = (t: EventTarget | null) => isToolUi(t);
     const stop = () => {
@@ -1336,11 +1810,12 @@ export function CopyToFigma() {
       if (inTool(e.target)) return setHovered(null);
       // A chart picks whole, or with ⌥ held, the band, slice or cell under
       // the pointer.
+      const actual = realTarget(e);
       const target =
-        e.target instanceof Element
+        isA(actual, Element)
           ? e.altKey
-            ? e.target
-            : (e.target.closest('svg') ?? e.target)
+            ? actual
+            : (actual.closest('svg') ?? actual)
           : null;
       setHovered(target);
     };
@@ -1422,11 +1897,14 @@ export function CopyToFigma() {
       )}
       {/* Its button sits in the toolbox and offers Section or Page; while
           picking a section, P still takes the whole page. */}
-      {(picking || copied) && (
+      {(picking || copied || message || exported) && (
         <span className="tb-toast" role="status">
           {picking
             ? 'Click a section to copy it, P for the whole page (Esc cancels)'
-            : `Copied ${copied?.name} · ${copied?.count} layers. Press ⌘V in Figma.`}
+            : <>{copied && `Copied ${copied.name} · ${copied.count} layers. Paste in Figma or import the SVG. `}{message}
+              {exported && <button type="button" onClick={() => downloadText(exported, 'prototype-toolbox.svg', 'image/svg+xml')}>Download SVG</button>}
+              <button type="button" aria-label="Dismiss export status" onClick={() => { setCopied(null); setMessage(''); setExported(null); }}>×</button>
+            </>}
         </span>
       )}
       <ToolboxItem

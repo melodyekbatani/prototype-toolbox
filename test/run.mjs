@@ -6,8 +6,8 @@
 // Serves dist/ on :4173, plus two pages with strict CSPs on :4174, then runs
 // the bookmarklet's code with Runtime.evaluate (as clicking it does) and
 // drives each tool with real mouse and keyboard input. Screenshots land in
-// screenshots/.
-import { spawn, execSync } from 'node:child_process';
+// test-results/bookmarklet/.
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -15,7 +15,7 @@ import path from 'node:path';
 import { serve } from '../scripts/serve.mjs';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const shots = path.join(root, 'screenshots');
+const shots = path.join(root, process.env.SCREENSHOT_DIR || 'test-results/bookmarklet');
 fs.mkdirSync(shots, { recursive: true });
 const PORT = 9335;
 const BASE = 'http://localhost:4173';
@@ -43,9 +43,6 @@ const csp = http
 
 // ---- Chrome
 
-try {
-  execSync(`pkill -9 -f "remote-debugging-port=${PORT}"`);
-} catch {}
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ptb-chrome-'));
 // A managed Google Chrome may switch remote debugging off a few seconds in,
 // once its admin policy arrives; an unmanaged build (Playwright's headless
@@ -269,7 +266,7 @@ check('sample page starts without the toolbox', c.hosts === 0 && c.scripts === 0
 await runBookmarklet();
 await helpers();
 c = await counts();
-check('first click: toolbox appears with its tray open', c.hosts === 1 && c.scripts === 1 && c.shown === true && c.appShown === 'true' && c.trayOpen === 'true' && c.tools === 4, JSON.stringify(c));
+check('first click: toolbox appears with its tray open', c.hosts === 1 && c.scripts === 1 && c.shown === true && c.appShown === 'true' && c.trayOpen === 'true' && c.tools === 5, JSON.stringify(c));
 await shot('sample-toolbox-open.png');
 
 await runBookmarklet();
@@ -385,7 +382,7 @@ await sleep(200);
 clip = await readClipboard();
 let robots = null;
 try { robots = JSON.parse(clip); } catch {}
-check('Copy for Claude gives JSON with page, selector and edits', robots?.tool === 'Content editor' && robots.page.includes('/sample.html') && robots.data.edits[0].selector.includes('nth-child'), clip.replace(/\s+/g, ' ').slice(0, 100));
+check('Copy for AI gives JSON with page, selector and edits', robots?.tool === 'Content editor' && robots.page.includes('/sample.html') && robots.data.edits[0].selector.includes('nth-child'), clip.replace(/\s+/g, ' ').slice(0, 100));
 
 // ---- 5. Copy to Figma
 
@@ -407,6 +404,39 @@ clip = await readClipboard();
 check('click copies the section as SVG with layer metadata', clip.startsWith('<svg') && clip.includes('<metadata id="prototype-section">') && clip.includes('Plum Hill Beans'), `${(clip.length / 1024).toFixed(1)} KB`);
 check('a toast says what was copied', await ev(`(__t.q('.tb-toast')?.textContent ?? '').includes('Copied')`));
 await shot('sample-figma-copied.png');
+
+// ---- 5b. Annotate
+
+p = await ev(`__t.tool('annotate')`);
+await click(p.x, p.y);
+check('annotate opens its panel', await ev(`Boolean(__t.q('[data-panel="annotate"]'))`));
+await ev(`document.querySelector('#shop').scrollIntoView({ block: 'start' })`);
+await sleep(200);
+const pinAt = await ev(`__t.center(document.querySelectorAll('.card img')[0])`);
+await click(pinAt.x, pinAt.y);
+await sleep(100);
+check('a click drops a pin and opens a note', await ev(`Boolean(__t.q('.tb-pin')) && __t.sr().activeElement === __t.q('.tb-note-field')`));
+await send('Input.insertText', { text: 'Bigger product shot' });
+await key('Enter', 'Enter', 13);
+await sleep(100);
+check('Enter saves the note to the list', (await ev(`__t.q('[data-panel="annotate"] .tb-note-text')?.textContent`)) === 'Bigger product shot');
+const pinBefore = await ev(`__t.center(__t.q('.tb-pin'))`);
+await ev('scrollBy(0, 120)');
+await sleep(150);
+const pinAfter = await ev(`__t.center(__t.q('.tb-pin'))`);
+check('the pin follows its element as the page scrolls', Math.round(pinBefore.y - pinAfter.y) === 120, `${pinBefore.y} → ${pinAfter.y}`);
+await shot('sample-annotate.png');
+p = await ev(`__t.center([...__t.q('[data-panel="annotate"]').querySelectorAll('.tb-links button')].find((b) => b.textContent.includes('Copy')))`);
+await click(p.x, p.y);
+clip = await readClipboard();
+check('Copy notes gives a numbered list', clip.includes('1. ') && clip.includes('Bigger product shot'), clip.split('\n')[1]);
+p = await ev(`__t.center(__t.q('[data-panel="annotate"] .tb-pill'))`);
+await click(p.x, p.y);
+await sleep(200);
+clip = await readClipboard();
+robots = null;
+try { robots = JSON.parse(clip); } catch {}
+check('Copy for AI gives JSON with each note and its selector', robots?.tool === 'Annotate' && robots.data.notes[0].note === 'Bigger product shot' && robots.data.notes[0].selector.includes('nth-child'), clip.replace(/\s+/g, ' ').slice(0, 100));
 
 // Putting the toolbox away closes the tools and gives the page its clicks back.
 p = await ev(`__t.tool('style')`);
@@ -440,7 +470,7 @@ for (const [url, label] of [
 await go(`${BASE}/`);
 await helpers();
 c = await counts();
-check('landing page runs the real toolbox', c.hosts === 1 && c.scripts === 1 && c.shown === true && c.tools === 4, JSON.stringify(c));
+check('landing page runs the real toolbox', c.hosts === 1 && c.scripts === 1 && c.shown === true && c.tools === 5, JSON.stringify(c));
 const href = await ev(`document.getElementById('bookmarklet').getAttribute('href')`);
 check('landing page link is the bookmarklet', href === `javascript:${bookmarklet}`);
 check('manual install code matches the link', (await ev(`document.getElementById('code').textContent`)) === href);

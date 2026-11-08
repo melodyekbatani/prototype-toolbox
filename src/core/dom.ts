@@ -46,14 +46,29 @@ export async function writeClipboard(text: string) {
     await navigator.clipboard.writeText(text);
     return true;
   } catch {
+    const active = document.activeElement as HTMLElement | null;
     const area = document.createElement('textarea');
     area.value = text;
     area.setAttribute(HOST_ATTR, '');
     area.style.cssText = 'position:fixed;top:-1000px;opacity:0';
-    document.body.append(area);
-    area.select();
-    const ok = document.execCommand('copy');
-    area.remove();
-    return ok;
+    try {
+      document.documentElement.append(area);
+      area.select();
+      return document.execCommand('copy');
+    } catch {
+      return false;
+    } finally {
+      area.remove();
+      active?.focus({ preventScroll: true });
+    }
   }
+}
+
+export function downloadText(text: string, filename: string, type = 'text/plain') {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }

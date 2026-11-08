@@ -13,6 +13,7 @@ import { StyleTweaker } from './tools/style-tweaker';
 import { Arranger } from './tools/arranger';
 import { TextEditor } from './tools/text-editor';
 import { CopyToFigma } from './tools/figma-copy';
+import { Annotate } from './tools/annotate';
 
 /**
  * The bookmarklet's payload. Loaded once per page: it makes one host element
@@ -22,6 +23,7 @@ import { CopyToFigma } from './tools/figma-copy';
  */
 
 declare const __VERSION__: string;
+declare const __EXTENSION__: boolean;
 
 type Api = {
   version: string;
@@ -50,6 +52,7 @@ function App() {
       <Arranger />
       <TextEditor />
       <CopyToFigma />
+      <Annotate />
     </div>
   );
 }
@@ -57,20 +60,21 @@ function App() {
 function boot(): Api {
   // A copy already running (the script loaded twice) keeps the page.
   const existing = window.__prototypeToolbox;
-  if (existing) return existing;
+  if (existing?.host.isConnected) return existing;
 
   // Any host left behind (say, by a copy whose global was cleared) is reused.
-  let host = document.querySelector<HTMLElement>(HOST_TAG);
+  let host = document.querySelector<HTMLElement>(`${HOST_TAG}[data-runtime="${__EXTENSION__ ? 'extension' : 'bookmarklet'}"]`);
   if (!host) {
     host = document.createElement(HOST_TAG);
     host.setAttribute(HOST_ATTR, '');
+    host.dataset.runtime = __EXTENSION__ ? 'extension' : 'bookmarklet';
     // On <html>, not <body>, so apps that replace the body don't take it.
     document.documentElement.append(host);
   }
   // Inline so the page's CSS can't move or hide it; its children are fixed
   // to the viewport.
   host.style.cssText =
-    'all:initial;position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647;display:block;';
+    'all:initial!important;position:fixed!important;top:0!important;left:0!important;width:0!important;height:0!important;z-index:2147483647!important;display:block!important;';
   const shadow = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
 
   // Constructed stylesheets aren't held to the page's style-src policy the way
@@ -122,9 +126,16 @@ const script = document.currentScript as HTMLScriptElement | null;
 const start = script?.dataset.start;
 const already = Boolean(window.__prototypeToolbox);
 const api = boot();
-if (!already) {
+if (__EXTENSION__) {
+  document.dispatchEvent(new Event('prototype-toolbox:extension-active'));
+  document.querySelectorAll<HTMLElement>(`${HOST_TAG}[data-runtime="bookmarklet"]`).forEach((el) => { el.style.setProperty('display', 'none', 'important'); });
+  if (already) api.toggle();
+  else api.open();
+} else if (!already) {
+  document.addEventListener('prototype-toolbox:extension-active', () => api.close());
   if (start === 'closed') api.close();
   else if (start === 'tray-closed') setShown(true);
   else api.open();
+  if (document.querySelector(`${HOST_TAG}[data-runtime="extension"]`)) api.close();
 }
 

@@ -1,12 +1,13 @@
 import React from 'react';
+import { useClipboard } from '../core/clipboard';
 import {
-  SendToRobots,
+  CopyForAI,
   ToolboxItem,
   useDraggablePanel,
   useToolboxExclusive,
 } from '../core/toolbox';
 import { componentName, describe, pathTo } from '../core/describe';
-import { isToolUi, writeClipboard } from '../core/dom';
+import { isToolUi, realTarget } from '../core/dom';
 
 /**
  * Content editor: while it's on, any text on the page can be clicked and
@@ -15,7 +16,14 @@ import { isToolUi, writeClipboard } from '../core/dom';
  * whenever the page's own scripts redraw that text.
  */
 
-type Edit = { el: HTMLElement; name: string; before: string; after: string };
+type Edit = { el: HTMLElement; name: string; before: string; after: string; nodes: Node[]; text: [Node, string | null][] };
+
+function snapshot(el: HTMLElement) {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const text: [Node, string | null][] = [];
+  while (walker.nextNode()) text.push([walker.currentNode, walker.currentNode.nodeValue]);
+  return { nodes: [...el.childNodes], text };
+}
 
 /** The text node under a point on screen, as the caret would land there. */
 function textNodeAt(x: number, y: number) {
@@ -49,9 +57,10 @@ function textTarget(event: MouseEvent) {
   if (isToolUi(event.target)) return null;
   const node = textNodeAt(event.clientX, event.clientY);
   const parent = node?.parentElement;
-  if (parent && parent !== document.body && !isToolUi(parent)) return parent;
-  const target = event.target;
+  if (parent && parent !== document.body && !isToolUi(parent) && !parent.closest('input,textarea,select,script,style,[contenteditable="true"]')) return parent;
+  const target = realTarget(event);
   if (!(target instanceof HTMLElement) || isToolUi(target)) return null;
+  if (target.closest('input,textarea,select,script,style')) return null;
   if (target === document.body || target === document.documentElement)
     return null;
   const ownText = [...target.childNodes].some(
@@ -65,7 +74,7 @@ export function TextEditor() {
   const [hovered, setHovered] = React.useState<HTMLElement | null>(null);
   const [editing, setEditing] = React.useState<HTMLElement | null>(null);
   const [edits, setEdits] = React.useState<Edit[]>([]);
-  const [copied, setCopied] = React.useState(false);
+  const clipboard = useClipboard();
   const drag = useDraggablePanel();
   useToolboxExclusive(open, () => setOpen(false));
 
@@ -81,7 +90,7 @@ export function TextEditor() {
 
   // While on, hovering outlines text and a click starts typing in it, with
   // links and buttons held so the click doesn't go anywhere.
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!open) return;
     const move = (e: MouseEvent) => setHovered(textTarget(e));
     const block = (e: MouseEvent) => {
@@ -105,6 +114,7 @@ export function TextEditor() {
                 name: componentName(el) ?? describe(el),
                 before: el.textContent ?? '',
                 after: el.textContent ?? '',
+                ...snapshot(el),
               },
             ],
       );
@@ -135,8 +145,9 @@ export function TextEditor() {
 
   // The element being typed in is editable only while it's the one picked,
   // with the caret dropped at the end of its text.
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!editing) return;
+    const previousEditable = editing.getAttribute('contenteditable');
     editing.contentEditable = 'plaintext-only';
     if (editing.contentEditable !== 'plaintext-only')
       editing.contentEditable = 'true';
@@ -160,14 +171,16 @@ export function TextEditor() {
     return () => {
       editing.removeEventListener('input', input);
       editing.removeEventListener('keydown', keydown);
-      editing.removeAttribute('contenteditable');
+      if (previousEditable === null) editing.removeAttribute('contenteditable');
+      else editing.setAttribute('contenteditable', previousEditable);
       record(editing);
     };
   }, [editing, record]);
 
   const reset = (edit: Edit) => {
     if (edit.el === editing) setEditing(null);
-    edit.el.textContent = edit.before;
+    for (const [node, value] of edit.text) node.nodeValue = value;
+    edit.el.replaceChildren(...edit.nodes);
     setEdits((current) => current.filter((e) => e !== edit));
   };
 
@@ -226,7 +239,7 @@ export function TextEditor() {
             </ul>
           )}
           <div className="tb-panel-foot">
-            <SendToRobots
+            <CopyForAI
               tool="Content editor"
               getData={() => ({
                 summary,
@@ -244,12 +257,10 @@ export function TextEditor() {
                 type="button"
                 disabled={changed.length === 0}
                 onClick={() => {
-                  void writeClipboard(summary);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1500);
+                  void clipboard.copy(summary);
                 }}
               >
-                {copied ? 'Copied' : 'Copy edits'}
+                {clipboard.label('Copy edits')}
               </button>
               <button
                 type="button"
@@ -270,7 +281,7 @@ export function TextEditor() {
 function Outline({ el, editing = false }: { el: HTMLElement; editing?: boolean }) {
   const [, setFrame] = React.useState(0);
   // Follows the text as it grows while typing, or the page scrolls.
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     let raf = 0;
     const tick = () => {
       setFrame((n) => n + 1);

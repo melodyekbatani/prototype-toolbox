@@ -1,109 +1,67 @@
 # Prototype Toolbox
 
-A bookmarklet that adds a small set of prototyping tools to any web page. Use them to nudge styles, move things around, rewrite copy and copy sections into Figma. Each tool can copy out what you changed, as CSS/Tailwind, JSON or SVG layers, or as a JSON bundle for Claude.
+A browser toolbar extension for prototyping on real websites. Tweak styles, rearrange elements, edit copy, pin notes, and export designs or a brief for your AI coding assistant.
 
-The tools started in the Rollouts prototype (`admin-next`, branch `melody/rollout-channel-coverage`). This project holds a standalone copy, with no imports from that repo.
+[Download the extension](https://github.com/melodyekbatani/prototype-toolbox/releases/latest/download/prototype-toolbox-extension.zip) · [Landing page](https://prototype-toolbox.quick.shopify.io/) · [Try the sample store](https://prototype-toolbox.quick.shopify.io/sample.html)
 
-- Production base URL: `https://prototype-toolbox.quick.shopify.io`
-- Local base URL: `http://localhost:4173`
+The landing page and sample store use Shopify sign-in. The GitHub download is public, and the installed extension works independently of the hosted site.
 
-## What came over from the Rollouts prototype
+## Install in Chrome
 
-| Tool / piece | Source in the Rollouts prototype | Status | Notes |
-|---|---|---|---|
-| Toolbox tray (launcher button, fan-out tray, one-tool-at-a-time, draggable panels) | `prototype/toolbox` | **Generic** | Same behaviour and animation. Tailwind classes were replaced with hand-written CSS. A shown/hidden store was added so the bookmarklet can toggle the toolbox. |
-| Send to Claude (`SendToRobots`) | `prototype/toolbox` | **Generic** | With no endpoint set, it copies a JSON bundle to the clipboard (labelled "Copy for Claude"). It POSTs instead when given `TOOLBOX_ROBOTS_URL` at build time or `window.__prototypeToolboxConfig.robotsUrl` at runtime. |
-| Content editor | `prototype/text-editor` | **Generic** | Copied essentially as-is. Its output now includes a selector for each edit. |
-| Copy to Figma | `prototype/figma-copy` | **Generic** | The Polaris/admin design-system component mapping was removed. Layers are named from the page's own tags, classes and ARIA labels. |
-| Hit testing (`pickAt`, transparent-pixel skipping) | `prototype/hit-test` | **Generic** | Verbatim. Now skips the toolbox's shadow host. |
-| Style tweaker | `prototype/style-tweaker` | **Adapted** | Admin DS tokens were replaced with Tailwind's default scales: a 4px spacing scale, plus Tailwind's type, weight, tracking, radius and opacity scales. Native colour pickers for text, fill and border replace `--color-*` tokens. |
-| Arranger | `prototype/arranger` | **Adapted** | The `useArranger` registration, scopes, tagged objects and `data-arrange-objects` were removed. Any element can be arranged, keyed by `pathname|selector`. |
-| Dev UI button | `prototype/dev-ui` | Left out | Depends on admin feature flags, a zustand store, design-system Button/Icon and motion. |
-| Prototype switcher | `prototype/prototype-switcher` | Left out | Depends on react-router, feature flags and the list of Rollouts prototypes. |
-| Audience mix / versions bar | `rollouts/*` | Left out | Rollouts data, versions store, recharts. |
-| Version history | `rollouts/*` | Left out | Depends on the router, audience versions and feature flags. |
-| Welcome switcher (empty-versions tray slot) | `rollouts-empty-versions` | Left out | Sets a Rollouts-only flag. |
+1. Download the ZIP above and unzip it into a folder you will keep.
+2. Open `chrome://extensions` and turn on **Developer mode**.
+3. Choose **Load unpacked**, then select the folder containing `manifest.json`.
+4. Pin **Prototype Toolbox** from Chrome's Extensions menu.
+5. Open a website and click the toolbar icon. Click again to hide it. The shortcut is **Option+Shift+T** on Mac or **Alt+Shift+T** on Windows/Linux; Chrome's extension shortcut settings can change it.
 
-## Commands
+This is a local unpacked extension, not a Chrome Web Store listing. To update, replace the unpacked files with the latest release and click **Reload** on the extension's card. Your organization may restrict extension installation.
+
+## Tools
+
+| Tool | What it does | Export |
+| --- | --- | --- |
+| Style tweaker | Change spacing, typography, colors, corners, and opacity; reset individual elements or all edits | CSS/Tailwind changes and an AI brief |
+| Arranger | Drag, scale, rotate, flip, and select multiple elements; preserve original transforms when resetting | Transform values and an AI brief |
+| Content editor | Click text and rewrite it; undo restores original markup and attached event listeners | Before/after text and an AI brief |
+| Copy to Figma | Pick a section or the page and serialize supported visible elements into SVG | Copy SVG or download a `.svg` file for Figma |
+| Annotate | Pin numbered notes to elements, edit/delete notes, follow elements while scrolling | Numbered notes and an AI brief |
+
+**Copy for AI** works with Codex, Claude, an agent running in cmux, or another tool that accepts text or a JSON file. Add optional instructions, copy the brief, and paste it into your tool, or use **Download brief**. Each brief contains that tool's changes, the page URL/title, viewport, selectors, and implementation guidance. It does not automatically connect to, send messages to, or change files in an AI app. The assistant needs access to the relevant source project.
+
+Selectors containing ` >>> ` cross open shadow roots: query the first segment, then query the next inside that element's `shadowRoot`.
+
+## Compatibility and limits
+
+- The extension uses Chrome's `activeTab` access after a toolbar click. It runs bundled code in an isolated content-script world, so normal websites with restrictive script CSPs do not need to load a remote script.
+- Chrome settings, the new-tab page, extension stores, and other browser-protected pages cannot be edited. A failed launch displays an error instead of claiming success. Local file pages require Chrome's **Allow access to file URLs** option.
+- Tools edit the top document and accessible open shadow roots. Embedded iframe content and closed shadow roots are not editable.
+- Changes are temporary and disappear on reload. Export them before leaving. A site's own rendering can overwrite text or style edits; no persistent source change is implied.
+- SVG export supports many DOM styles and text/image layers, but does not recreate arbitrary web rendering or native Figma components. Unreadable images, protected frames, canvas/video, or truncated large pages produce export warnings. Use **Download SVG** if pasting is unavailable. Browser output and valid SVG are tested; an actual Figma-app import is not part of the automated checks.
+- Copy buttons report clipboard failure, and downloadable AI briefs/SVG provide a file-based fallback.
+- Built for desktop pointer/keyboard use. Chrome is the tested target; other Chromium browsers may support loading the same package but are not independently certified here.
+
+## Permissions and data
+
+The manifest requests only `activeTab`, `scripting`, and `clipboardWrite`. There are no broad host permissions, analytics, background page scans, or remote executable code. Page content remains in the current tab unless you explicitly copy or download it. Image export may request image URLs already present on the page to embed them into the SVG.
+
+The optional legacy bookmarklet still exists on the landing page. Strict CSPs or cross-site Shopify sign-in can block it; use the extension for those sites.
+
+## Development
 
 ```sh
-pnpm install          # esbuild, preact, typescript (dev deps only)
-pnpm build            # dist/ for production: bookmarklet loads from prototype-toolbox.quick.shopify.io
-pnpm build:local      # dist/ with the bookmarklet pointed at http://localhost:4173
-pnpm dev              # local build + watch + serve on http://localhost:4173
-pnpm serve            # serve dist/ on :4173 (no build)
+pnpm install
+pnpm exec playwright install chromium
+pnpm build              # production landing page, unpacked extension, ZIP
 pnpm typecheck
-pnpm test             # local build, then the headless-Chrome checks (see below)
-pnpm deploy           # build + `quick deploy dist prototype-toolbox` (QUICK_SITE overrides the name)
+pnpm test:extension     # real toolbar action, CSP, edits, undo, exports, failures
+pnpm test               # legacy bookmarklet and responsive landing checks
+pnpm test:websites      # public-site injection, actual style edit, and reset
+pnpm dev                # watch + local site on http://localhost:4173
+pnpm deploy             # production build + Quick deploy
 ```
 
-`TOOLBOX_BASE_URL` sets the URL the bookmarklet loads `toolbox.js` from, and `TOOLBOX_ROBOTS_URL` sets an optional POST endpoint for "Send to Claude".
+`dist/` contains the landing page, sample store, bookmarklet bundle, and extension ZIP. `extension-dist/` is ready for **Load unpacked**. `TOOLBOX_BASE_URL` changes the legacy bookmarklet's script URL; `QUICK_SITE` changes the deployment name.
 
-`dist/` contains:
+Tests use temporary browser profiles. Screenshots go to ignored `test-results/`. The public-site smoke test needs network access; markup or availability changes can require adapting its targets. The bookmarklet suite prefers Playwright's headless Chromium; `CHROME=/path/to/browser` overrides it. Use a free local port 9335 for that suite.
 
-- `index.html`: the landing page
-- `sample.html` and `sample-assets/`: a mock storefront to try the tools on
-- `toolbox.js`: the bundle
-- `bookmarklet.txt`: the bookmarklet's `javascript:` URL
-
-## Install
-
-1. Show the bookmarks bar: ⌘⇧B on Mac or Ctrl⇧B on Windows, in Chrome, Edge, Arc or Firefox. In Safari, choose View › Show Favorites Bar.
-2. Drag the **Prototype toolbox** button from the landing page onto the bar.
-3. On any page, click the bookmark to open the toolbox, and click it again to put it away.
-
-To set it up by hand, create a bookmark named "Prototype toolbox". Paste the code from the landing page's "Or add it by hand" box (it has a Copy button) as its URL.
-
-## How it works
-
-- **One IIFE, about 100 KB minified (about 35 KB gzipped).** It is built with esbuild and uses Preact through `preact/compat`. Preact takes about 24 KB of the bundle, where React 19 would add about 190 KB, and it is a lighter guest on someone else's page. The bundle has no Tailwind runtime: `src/styles.css` is minified into the bundle as a string.
-- **Shadow DOM isolation.** Everything renders inside one open shadow root on a `<prototype-toolbox data-prototype-toolbox>` element.
-  - The host element is appended to `<html>` and styled `all: initial; position: fixed; z-index: 2147483647`.
-  - Styles go in through `adoptedStyleSheets`, which page CSPs don't restrict. A `<style>` element is the fallback.
-  - The page's CSS can't reach the tools, and the tools' CSS can't reach the page. The test checks this against the sample page's `button, div, span { font-family: Georgia }` rule.
-  - Because of shadow DOM retargeting, page listeners see toolbox events as coming from the host element. `isToolUi()` and `composedPath()` keep each tool from treating the toolbox's own UI as page content.
-- **One global.** `window.__prototypeToolbox` is `{ version, host, toggle(), open(), close(), isOpen() }`. Closing closes any open tool, folds the tray and hides the app. It stays mounted, so the lists of edits survive a close/open.
-- **Bookmarklet logic** (`scripts/bookmarklet.js`, minified into `dist/bookmarklet.txt`):
-  1. If `window.__prototypeToolbox` exists, call `toggle()`. Nothing is injected.
-  2. Otherwise, if the toolbox is already loading (the `__prototypeToolboxLoading` flag is set, or a `script[data-prototype-toolbox-script]` exists), do nothing. This makes a quick double-click safe.
-  3. Otherwise, add one `<script data-prototype-toolbox-script>` from the base URL, with an hourly `?h=` cache-buster. The script opens the toolbox when it boots.
-  4. If the script fails, show a short alert saying the page's CSP probably blocks it, then remove the tag and the flag. Failure means any of: `onerror`, loading without defining the global, a 15 s timeout, or a Trusted Types `TypeError`.
-
-  `boot()` also reuses an existing host element or global, so even a second copy of the script can't add a second toolbox.
-- A page can add the script itself with `data-start="closed"` or `"tray-closed"`. The landing page uses `"tray-closed"` on phones.
-
-## Known limitations
-
-- **Strict Content Security Policy.** Sites that only allow their own scripts block the bookmarklet, and you get the alert instead. Examples include GitHub, Google Docs and Gmail, banking sites and many admin sites.
-- **Nothing is saved.** Every change lives in the open tab and is gone on reload. Copy your changes out first.
-- **Iframes.** The tools reach the top page only.
-- **Shadow DOM-heavy pages.** Pages built from web components keep their insides closed off, so the pickers usually stop at the component's outer box.
-- **Re-rendering SPAs.** Single-page apps can re-render text and styles you've edited. The Arranger reapplies its moves, but text and style edits can be lost.
-- **Hosted behind SSO.** If the base URL needs a login cookie, other sites can't load `toolbox.js`, because the cookie isn't sent cross-site. The bookmarklet needs a publicly readable host.
-- **Cross-origin images** without CORS can't be read. Copy to Figma shows them as grey boxes, and the pickers treat them as solid.
-- **Desktop browsers.** The tools are built for a mouse and keyboard.
-
-## Tests
-
-`pnpm test` runs `test/run.mjs`, a dependency-free DevTools-protocol script.
-
-**Setup**
-
-- It serves `dist/` on :4173, plus two strict-CSP pages on :4174.
-- It starts headless Chrome on port 9335 with a fresh profile, killing any leftover instance first.
-- It prefers Playwright's unmanaged `chrome-headless-shell` when one is installed. On this machine, the admin policy on managed Google Chrome switches remote debugging off a few seconds after launch. `CHROME=/path/to/chrome` overrides the choice.
-
-**What it checks**
-
-- Bookmarklet clicks:
-  - It runs the bookmarklet's code with `Runtime.evaluate`, which is what clicking it does.
-  - Three clicks give open, closed, then open, with one host and one script tag throughout.
-  - A double click before the script has loaded still gives one of each.
-- Real mouse and keyboard input drive each tool.
-- The CSP and Trusted Types pages give the alert and leave the page clean.
-- On the landing page:
-  - the live toolbox is present;
-  - the bookmarklet href and the manual install code match;
-  - the page doesn't scroll sideways at desktop width or at 390px.
-
-**Screenshots** go to `screenshots/`.
+The extension suite checks real clipboard contents, downloaded JSON/SVG, exact style/transform reset, text undo with preserved listeners, annotations, open web components, tool switching/closing, denied clipboard access, protected-page errors, and coexistence with the landing-page demo. The sample store's product photography was generated through the Shopify image gateway; the tool examples are real screenshots of the running extension.

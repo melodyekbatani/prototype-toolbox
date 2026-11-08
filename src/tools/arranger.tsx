@@ -1,13 +1,14 @@
 import React from 'react';
+import { useClipboard } from '../core/clipboard';
 import {
-  SendToRobots,
+  CopyForAI,
   ToolboxItem,
   useDraggablePanel,
   useToolboxExclusive,
 } from '../core/toolbox';
 import { pickAt } from '../core/hit-test';
-import { describe, pathTo } from '../core/describe';
-import { isToolUi, writeClipboard } from '../core/dom';
+import { describe, pathTo, resolvePath } from '../core/describe';
+import { isToolUi } from '../core/dom';
 
 /**
  * Arranger: switch it on and click any element (an image, a card, a slice
@@ -77,7 +78,7 @@ function resolve(key: string): Element | null {
   if (known?.isConnected) return known;
   let element: Element | null = null;
   try {
-    element = document.querySelector(key.slice(split + 1));
+    element = resolvePath(key.slice(split + 1));
   } catch {
     // A path from an older layout; it just won't apply.
   }
@@ -89,7 +90,7 @@ function resolve(key: string): Element | null {
 // so a re-render that replaces it is noticed and kept underneath.
 const written = new Map<
   Element,
-  { key: string; original: string | null; value: string }
+  { key: string; original: string | null; priority: string; base: string | null; value: string }
 >();
 
 /** Writes an element's adjustment, or restores it without one. */
@@ -100,12 +101,17 @@ function applyFree(element: Element, key: string, adjustment?: Adjustment) {
     : (element as HTMLElement | SVGElement).style.transform || null;
   const record = written.get(element);
   const original = record && current === record.value ? record.original : current;
+  const unchanged = record && current === record.value;
+  const priority = unchanged ? record.priority : (element as HTMLElement).style.getPropertyPriority('transform');
+  const computed = svg ? null : getComputedStyle(element).transform;
+  const base = unchanged ? record.base : current ?? (computed === 'none' ? null : computed);
   const set = (value: string | null) => {
     if (svg) {
       if (value) element.setAttribute('transform', value);
       else element.removeAttribute('transform');
     } else {
-      (element as HTMLElement | SVGElement).style.transform = value ?? '';
+      if (value) (element as HTMLElement | SVGElement).style.setProperty('transform', value, adjustment ? 'important' : priority);
+      else (element as HTMLElement | SVGElement).style.removeProperty('transform');
     }
   };
   if (!adjustment) {
@@ -122,10 +128,10 @@ function applyFree(element: Element, key: string, adjustment?: Adjustment) {
     value =
       `${original ?? ''} translate(${cx}, ${cy}) ${transformOf(adjustment, true)} translate(${-cx}, ${-cy})`.trim();
   } else {
-    value = `${transformOf(adjustment)} ${original ?? ''}`.trim();
+    value = `${transformOf(adjustment)} ${base ?? ''}`.trim();
   }
   if (value !== current) set(value);
-  written.set(element, { key, original, value });
+  written.set(element, { key, original, priority, base, value });
 }
 
 /** Turns a drag on screen into the element's own coordinates. */
@@ -158,7 +164,7 @@ export function Arranger() {
 
   // Elements are written to directly: now, and again every so often to catch
   // them after the page's own scripts re-render them.
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const apply = () => {
       const current = state.current.adjustments;
       for (const [key, adjustment] of Object.entries(current)) {
@@ -188,7 +194,7 @@ export function Arranger() {
 
   // While on, the whole page is the Arranger's: clicks select and drag rather
   // than reaching the page, apart from the toolbox's own UI.
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!enabled) return;
     const hit = (event: Event) => {
       const node = event.target;
@@ -308,7 +314,7 @@ export function Arranger() {
   return (
     <>
       <ToolboxItem
-        label={enabled ? 'Close Arranger' : 'Arranger'}
+        label={enabled ? 'Close arranger' : 'Arranger'}
         active={enabled}
         order={3}
         badge={Object.keys(adjustments).length}
@@ -356,7 +362,7 @@ function ArrangeOutlines({
   const [boxes, setBoxes] = React.useState<
     { key: string; rect: DOMRect; tone: 'hover' | 'selected' }[]
   >([]);
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     let raf = 0;
     const tick = () => {
       const next: { key: string; rect: DOMRect; tone: 'hover' | 'selected' }[] =
@@ -466,7 +472,7 @@ function ArrangeHandles({
 
   // Followed every frame, so the handles keep up with drags, scrolling and
   // the page's own layout changes.
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     let raf = 0;
     const tick = () => {
       const element = resolve(selected);
@@ -585,7 +591,7 @@ function ArrangePanel({
   onChange: (key: string, adjustment: Adjustment) => void;
   onReset: () => void;
 }) {
-  const [copied, setCopied] = React.useState(false);
+  const clipboard = useClipboard();
   const drag = useDraggablePanel();
   const single = selected.length === 1 ? selected[0] : null;
   const current = single ? (adjustments[single] ?? IDENTITY) : null;
@@ -685,19 +691,16 @@ function ArrangePanel({
           type="button"
           className="tb-button"
           onClick={() => {
-            void writeClipboard(JSON.stringify(adjustments, null, 2)).then(() => {
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1500);
-            });
+            void clipboard.copy(JSON.stringify(adjustments, null, 2));
           }}
         >
-          {copied ? 'Copied' : 'Copy values'}
+          {clipboard.label('Copy values')}
         </button>
         <button type="button" className="tb-button is-plain" onClick={onReset}>
           Reset all
         </button>
       </div>
-      <SendToRobots
+      <CopyForAI
         tool="Arranger"
         getData={() => ({
           // Keys are `page|selector`, with a label saying what each is.
@@ -724,11 +727,13 @@ function ArrangeField({
       {field.label}
       <input
         type="number"
+        min={field.key === 'scale' ? 0.05 : undefined}
         step={field.step}
         value={value}
-        onInput={(event: Event) =>
-          onChange(Number((event.target as HTMLInputElement).value) || 0)
-        }
+        onInput={(event: Event) => {
+          const value = Number((event.target as HTMLInputElement).value);
+          if (Number.isFinite(value)) onChange(field.key === 'scale' ? Math.max(0.05, value) : value);
+        }}
         className="tb-input tb-input-number"
       />
     </label>

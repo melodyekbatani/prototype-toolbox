@@ -1,4 +1,7 @@
 node_modules/
 dist/
+extension-dist/
+test-results/
+playwright-report/
 test/.chrome-*/
 .DS_Store

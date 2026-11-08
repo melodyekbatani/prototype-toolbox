@@ -1,8 +1,8 @@
 {
   "name": "prototype-toolbox",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "A bookmarklet that drops prototyping tools onto any web page.",
+  "description": "A browser toolbar extension for editing, arranging, annotating, and exporting web designs.",
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -11,9 +11,12 @@
     "serve": "node scripts/serve.mjs dist 4173",
     "typecheck": "tsc --noEmit",
     "test": "TOOLBOX_BASE_URL=http://localhost:4173 node scripts/build.mjs && node test/run.mjs",
-    "deploy": "node scripts/build.mjs && quick deploy dist ${QUICK_SITE:-prototype-toolbox}"
+    "deploy": "node scripts/build.mjs && quick deploy dist ${QUICK_SITE:-prototype-toolbox}",
+    "test:extension": "node scripts/build.mjs && node test/extension.mjs",
+    "test:websites": "node scripts/build.mjs && node test/websites.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "esbuild": "~0.25.12",
     "preact": "^10.29.8",
     "typescript": "^5.9.3"

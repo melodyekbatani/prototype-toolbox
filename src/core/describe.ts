@@ -38,7 +38,17 @@ export function describe(el: Element) {
 }
 
 /** A CSS selector for the element by position, from the nearest plain id. */
-export function pathTo(element: Element) {
+export function pathTo(element: Element): string {
+  const root = element.getRootNode();
+  if (root instanceof ShadowRoot) {
+    const steps: string[] = [];
+    for (let node: Element | null = element; node; node = node.parentElement) {
+      if (node.id) { steps.unshift(`#${CSS.escape(node.id)}`); break; }
+      const siblings = node.parentElement?.children ?? root.children;
+      steps.unshift(`:nth-child(${[...siblings].indexOf(node) + 1})`);
+    }
+    return `${pathTo(root.host)} >>> ${steps.join(' > ')}`;
+  }
   const steps: string[] = [];
   let node: Element | null = element;
   while (node && node !== document.body) {
@@ -53,4 +63,18 @@ export function pathTo(element: Element) {
     node = parent;
   }
   return ['body', ...steps].join(' > ');
+}
+
+/** >>> marks an open shadow-root boundary in exported selectors. */
+export function resolvePath(selector: string): Element | null {
+  let root: Document | ShadowRoot = document;
+  const parts = selector.split(' >>> ');
+  for (let i = 0; i < parts.length; i++) {
+    const element: Element | null = root.querySelector(parts[i]);
+    if (!element) return null;
+    if (i === parts.length - 1) return element;
+    if (!element.shadowRoot) return null;
+    root = element.shadowRoot;
+  }
+  return null;
 }
