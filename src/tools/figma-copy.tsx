@@ -1806,8 +1806,15 @@ export function CopyToFigma() {
       setPicking(false);
       setHovered(null);
     };
+    let pointer: { x: number; y: number } | null = null;
+    let keyboardPoint: { x: number; y: number } | null = null;
     const move = (e: MouseEvent) => {
       if (inTool(e.target)) return setHovered(null);
+      pointer = { x: e.clientX, y: e.clientY };
+      // Keep a parent selected with the keyboard through the tiny movement
+      // that accompanies a click. A deliberate move resumes pointer picking.
+      if (keyboardPoint && Math.hypot(pointer.x - keyboardPoint.x, pointer.y - keyboardPoint.y) < 4) return;
+      keyboardPoint = null;
       // A chart picks whole, or with ⌥ held, the band, slice or cell under
       // the pointer.
       const actual = realTarget(e);
@@ -1849,6 +1856,7 @@ export function CopyToFigma() {
         current.parentElement !== document.body
       ) {
         e.preventDefault();
+        keyboardPoint = pointer;
         setHovered(current.parentElement);
       }
       // Into a chart, past its defs to the first thing it draws.
@@ -1859,6 +1867,7 @@ export function CopyToFigma() {
         : undefined;
       if (e.key === 'ArrowDown' && child) {
         e.preventDefault();
+        keyboardPoint = pointer;
         setHovered(child);
       }
     };

@@ -1,0 +1,26 @@
+{
+  "reference": "https://vesna.liquid.mock.shop/",
+  "catalog": "https://vesna.mock.shop/llms.txt",
+  "images": [
+    {
+      "file": "hero.jpg",
+      "source": "https://vesna.mock.shop/cdn/shop/mock-shop-production-media/vesna/look/157396a2-841f-455f-9dc3-63364ee60cab.png?width=3840",
+      "alt": ""
+    },
+    {
+      "file": "payette.jpg",
+      "source": "https://vesna.mock.shop/cdn/shop/mock-shop-production-media/_seeds/vesna/96e1113c2a0f1bebec1fdeb6dfabe5054e979719082cfcf900f6f28c3afe5164.jpg?v=0&width=3840",
+      "alt": "Payette Quarter Zip in Forest"
+    },
+    {
+      "file": "teton.jpg",
+      "source": "https://vesna.mock.shop/cdn/shop/mock-shop-production-media/_seeds/vesna/32bfb5c8f6ae253cdfe3c6b900e7ac24cea12715e8d646ba0d96ad89c170d403.jpg?v=0&width=3840",
+      "alt": "Teton Zip Jacket in Forest/Plum"
+    },
+    {
+      "file": "gulch.jpg",
+      "source": "https://vesna.mock.shop/cdn/shop/mock-shop-production-media/_seeds/vesna/b5432faf2c24f68190e6825e858e5e6b4019d13db595f42c6f3e3c25a0b3af3c.jpg?v=0&width=3840",
+      "alt": "Gulch Mesh Jacket in Tangerine"
+    }
+  ]
+}

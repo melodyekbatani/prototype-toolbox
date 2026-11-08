@@ -233,7 +233,7 @@ const PAGE_HELPERS = `
   window.__t = {
     sr: () => document.querySelector('prototype-toolbox')?.shadowRoot,
     q: (sel) => window.__t.sr()?.querySelector(sel),
-    center: (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; },
+    center: (el) => { if (!el) return null; el.scrollIntoView({block: "nearest", inline: "nearest"}); const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; },
     tool: (label) => window.__t.center([...window.__t.sr().querySelectorAll('.tb-tool')].find((b) => b.dataset.tool.toLowerCase().includes(label.toLowerCase()))),
     counts: () => ({
       hosts: document.querySelectorAll('prototype-toolbox').length,
@@ -367,15 +367,15 @@ const title = await ev(`__t.center(document.querySelector('.card h3'))`);
 await click(title.x, title.y);
 check('clicking text makes it editable', await ev(`document.querySelector('.card h3').isContentEditable`));
 await ev(`(() => { const s = getSelection(); s.selectAllChildren(document.querySelector('.card h3')); })()`);
-await send('Input.insertText', { text: 'Tidepool Mug' });
+await send('Input.insertText', { text: 'Trail Quarter Zip' });
 await key('Enter', 'Enter', 13);
-check('typing replaces the text', (await ev(`document.querySelector('.card h3').textContent`)) === 'Tidepool Mug');
-check('the edit is listed with what it was', await ev(`__t.q('.tb-before')?.textContent === 'Harbour Mug' && __t.q('.tb-after')?.textContent === 'Tidepool Mug'`));
+check('typing replaces the text', (await ev(`document.querySelector('.card h3').textContent`)) === 'Trail Quarter Zip');
+check('the edit is listed with what it was', await ev(`__t.q('.tb-before')?.textContent === 'Payette Quarter Zip' && __t.q('.tb-after')?.textContent === 'Trail Quarter Zip'`));
 await shot('sample-content-editor.png');
 p = await ev(`__t.center([...__t.q('[data-panel="content-editor"]').querySelectorAll('.tb-links button')].find((b) => b.textContent.includes('Copy')))`);
 await click(p.x, p.y);
 clip = await readClipboard();
-check('Copy edits gives before → after', clip.includes('"Harbour Mug" → "Tidepool Mug"'), clip.split('\n')[1]);
+check('Copy edits gives before → after', clip.includes('"Payette Quarter Zip" → "Trail Quarter Zip"'), clip.split('\n')[1]);
 p = await ev(`__t.center(__t.q('.tb-panel-foot .tb-pill'))`);
 await click(p.x, p.y);
 await sleep(200);
@@ -401,7 +401,7 @@ await shot('sample-figma-pick.png');
 await click(card.x, card.y + card.h / 2 - 20);
 await sleep(400);
 clip = await readClipboard();
-check('click copies the section as SVG with layer metadata', clip.startsWith('<svg') && clip.includes('<metadata id="prototype-section">') && clip.includes('Plum Hill Beans'), `${(clip.length / 1024).toFixed(1)} KB`);
+check('click copies the section as SVG with layer metadata', clip.startsWith('<svg') && clip.includes('<metadata id="prototype-section">') && clip.toLowerCase().includes('teton zip jacket'), `${(clip.length / 1024).toFixed(1)} KB`);
 check('a toast says what was copied', await ev(`(__t.q('.tb-toast')?.textContent ?? '').includes('Copied')`));
 await shot('sample-figma-copied.png');
 
@@ -416,10 +416,10 @@ const pinAt = await ev(`__t.center(document.querySelectorAll('.card img')[0])`);
 await click(pinAt.x, pinAt.y);
 await sleep(100);
 check('a click drops a pin and opens a note', await ev(`Boolean(__t.q('.tb-pin')) && __t.sr().activeElement === __t.q('.tb-note-field')`));
-await send('Input.insertText', { text: 'Bigger product shot' });
+await send('Input.insertText', { text: 'Add another product angle' });
 await key('Enter', 'Enter', 13);
 await sleep(100);
-check('Enter saves the note to the list', (await ev(`__t.q('[data-panel="annotate"] .tb-note-text')?.textContent`)) === 'Bigger product shot');
+check('Enter saves the note to the list', (await ev(`__t.q('[data-panel="annotate"] .tb-note-text')?.textContent`)) === 'Add another product angle');
 const pinBefore = await ev(`__t.center(__t.q('.tb-pin'))`);
 await ev('scrollBy(0, 120)');
 await sleep(150);
@@ -429,14 +429,14 @@ await shot('sample-annotate.png');
 p = await ev(`__t.center([...__t.q('[data-panel="annotate"]').querySelectorAll('.tb-links button')].find((b) => b.textContent.includes('Copy')))`);
 await click(p.x, p.y);
 clip = await readClipboard();
-check('Copy notes gives a numbered list', clip.includes('1. ') && clip.includes('Bigger product shot'), clip.split('\n')[1]);
+check('Copy notes gives a numbered list', clip.includes('1. ') && clip.includes('Add another product angle'), clip.split('\n')[1]);
 p = await ev(`__t.center(__t.q('[data-panel="annotate"] .tb-pill'))`);
 await click(p.x, p.y);
 await sleep(200);
 clip = await readClipboard();
 robots = null;
 try { robots = JSON.parse(clip); } catch {}
-check('Copy for AI gives JSON with each note and its selector', robots?.tool === 'Annotate' && robots.data.notes[0].note === 'Bigger product shot' && robots.data.notes[0].selector.includes('nth-child'), clip.replace(/\s+/g, ' ').slice(0, 100));
+check('Copy for AI gives JSON with each note and its selector', robots?.tool === 'Annotate' && robots.data.notes[0].note === 'Add another product angle' && robots.data.notes[0].selector.includes('nth-child'), clip.replace(/\s+/g, ' ').slice(0, 100));
 
 // Putting the toolbox away closes the tools and gives the page its clicks back.
 p = await ev(`__t.tool('style')`);

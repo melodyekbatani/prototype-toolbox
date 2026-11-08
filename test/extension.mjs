@@ -148,6 +148,19 @@ try {
     await tool('Annotate').click(); await toggle(); await page.locator('#page-button').click();
     expect(await page.evaluate(()=>window.clicks)).toBe(1);
   });
+  await check('Figma keyboard parent selection survives small click movement',async()=>{
+    await open('http://localhost:4184/');
+    await tool('Copy to Figma').click(); await tool('Section').click();
+    const nested=await page.locator('#nested').boundingBox();
+    await page.mouse.move(nested.x+10,nested.y+8);
+    await page.keyboard.press('ArrowUp');
+    await page.mouse.move(nested.x+11,nested.y+9);
+    await page.mouse.click(nested.x+11,nested.y+9);
+    await expect(host.getByRole('status')).toContainText('Copied');
+    const svg=await clip();
+    expect(svg).toContain('Original');
+    expect(svg).toContain('stays interactive.');
+  });
   await check('Clipboard denial reports failure instead of a false success', async()=>{
     await open('http://localhost:4184/');
     await tool('Annotate').click(); await page.locator('#title').click();

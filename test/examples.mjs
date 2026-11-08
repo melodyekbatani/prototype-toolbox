@@ -29,7 +29,7 @@ try {
   await open();
   await tool('Style tweaker').click(); await page.locator('h1').click();
   await tool('More Size').click();
-  await host.getByLabel('Colour',{exact:true}).fill('#1f5130');
+  await host.getByLabel('Colour',{exact:true}).fill('#ffffff');
   await shot('style-tweaker');
 
   await open();
@@ -44,8 +44,8 @@ try {
 
   await open();
   await tool('Content editor').click();await page.locator('h1').click();
-  await page.locator('h1').fill('Make mornings slower');await page.keyboard.press('Enter');
-  await host.getByLabel('Instructions for your AI').fill('Keep the headline short and warm.');
+  await page.locator('h1').fill('Go your own way');await page.keyboard.press('Enter');
+  await host.getByLabel('Instructions for your AI').fill('Keep the headline short and direct.');
   await shot('content-editor');
 
   await open();
@@ -58,7 +58,7 @@ try {
   await open();
   await page.locator('.cards').scrollIntoViewIfNeeded();
   await tool('Annotate').click();await page.locator('.card img').first().click();
-  await host.locator('.tb-note-field').fill('Give the mug more breathing room.');
+  await host.locator('.tb-note-field').fill('Show a second angle of the jacket.');
   await host.locator('.tb-note-field').press('Enter');
   await shot('annotate');
 } finally {await context?.close();site.close();}

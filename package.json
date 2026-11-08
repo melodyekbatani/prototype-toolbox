@@ -1,6 +1,6 @@
 {
   "name": "prototype-toolbox",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "A browser toolbar extension for editing, arranging, annotating, and exporting web designs.",
   "type": "module",

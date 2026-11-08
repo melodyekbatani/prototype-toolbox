@@ -5,27 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Prototype toolbox</title>
 <meta name="description" content="A browser toolbar extension for prototyping on websites.">
-<meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#0a0a0a">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#ffffff">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23fafafa'/%3E%3Cg transform='translate%286 6%29' fill='none' stroke='%230a0a0a' stroke-width='1.6' stroke-linejoin='round'%3E%3Cpath d='M7 6V4.5A1.5 1.5 0 0 1 8.5 3h3A1.5 1.5 0 0 1 13 4.5V6'/%3E%3Cpath d='M2.5 10.5V8a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v2.5Z'/%3E%3Cpath d='M2.5 10.5h15v4a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2Z'/%3E%3Cpath d='M7.5 10.5v2M12.5 10.5v2' stroke-linecap='round'/%3E%3C/g%3E%3C/svg%3E">
 <style>
-  /* Values follow the Admin Next design system's dark theme
-     (admin-next app/ui/tokens): semantic colours, the type scale,
-     radius, shadow and easing tokens. */
+  /* Quiet white canvas with restrained borders, following the Vesna reference. */
   :root {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --text-secondary: oklch(0.80 0 0);
-    --text-tertiary: oklch(64% 0 0);
-    --muted: oklch(0.205 0 0);
-    --border: oklch(1 0 0 / 10%);
-    --border-strong: oklch(1 0 0 / 18%);
+    --background: #fff;
+    --foreground: #151515;
+    --text-secondary: #4b4b4b;
+    --text-tertiary: #666;
+    --muted: #f4f4f2;
+    --border: #dededb;
+    --border-strong: #aaa;
     --ring: oklch(0.556 0 0);
-    --primary: oklch(0.985 0 0);
-    --primary-foreground: oklch(0.205 0 0);
+    --primary: #151515;
+    --primary-foreground: #fff;
 
     --text-sm: 12px;   --leading-sm: 18px;
     --text-base: 13px; --leading-base: 20px;
@@ -33,9 +31,9 @@
     --text-xl: 17px;   --leading-xl: 24px;
     --text-2xl: 22px;  --leading-2xl: 26px;
 
-    --radius-sm: 6px;
-    --radius-md: 10px;
-    --radius-2xl: 16px;
+    --radius-sm: 3px;
+    --radius-md: 4px;
+    --radius-2xl: 4px;
 
     --ease-out: cubic-bezier(0.2, 0.8, 0, 1);
     --shadow-button-primary:
@@ -43,8 +41,8 @@
       0 1px 0.5px -0.5px rgb(0 0 0 / 0.12), 0 1px 2px -0.5px rgb(0 0 0 / 0.12),
       0 4px 6px -2px rgb(0 0 0 / 0.12), 0 2px 3px -1.5px rgb(0 0 0 / 0.12);
   }
-  * { box-sizing: border-box; corner-shape: superellipse(1.333); }
-  html { -webkit-text-size-adjust: 100%; color-scheme: dark; }
+  * { box-sizing: border-box;  }
+  html { -webkit-text-size-adjust: 100%; color-scheme: light; }
   body {
     margin: 0;
     background: var(--background);
@@ -66,7 +64,7 @@
   }
   :focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; border-radius: var(--radius-sm); }
 
-  .skip { position: absolute; left: 16px; top: -48px; padding: 8px 12px; background: var(--primary); color: var(--primary-foreground); border-radius: 999px; font-weight: 500; text-decoration: none; z-index: 1; }
+  .skip { position: absolute; left: 16px; top: -48px; padding: 8px 12px; background: var(--primary); color: var(--primary-foreground); border-radius: 4px; font-weight: 500; text-decoration: none; z-index: 1; }
   .skip:focus { top: 16px; }
   .visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
@@ -79,8 +77,8 @@
   .cta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   .bookmarklet {
     display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px 0 14px;
-    border-radius: 999px; corner-shape: unset; text-decoration: none;
-    background: var(--primary); color: var(--primary-foreground); box-shadow: var(--shadow-button-primary);
+    border-radius: 4px; corner-shape: unset; text-decoration: none;
+    background: var(--primary); color: var(--primary-foreground); box-shadow: none;
     font-size: var(--text-lg); font-weight: 500; cursor: grab;
     transition: transform 160ms var(--ease-out), background-color 160ms ease;
   }
@@ -116,13 +114,13 @@
   .code { position: relative; }
   .code pre { margin: 0; padding: 12px 88px 12px 12px; background: var(--muted); border: 1px solid var(--border); border-radius: var(--radius-md); font-size: var(--text-sm); line-height: var(--leading-sm); color: var(--text-secondary); white-space: pre-wrap; word-break: break-all; max-height: 140px; overflow: auto; }
   .copy {
-    position: absolute; top: 8px; right: 8px; height: 26px; padding: 0 12px; border-radius: 999px; corner-shape: unset;
-    border: 0; background: oklch(1 0 0 / 8%); color: var(--foreground);
+    position: absolute; top: 8px; right: 8px; height: 26px; padding: 0 12px; border-radius: 4px; corner-shape: unset;
+    border: 0; background: #e8e8e5; color: var(--foreground);
     font: 500 var(--text-base)/1 inherit; font-family: inherit; cursor: pointer;
     transition: transform 160ms var(--ease-out), background-color 160ms ease;
   }
   .copy:active { transform: scale(0.97); }
-  .copy.done { color: oklch(0.80 0.15 150); }
+  .copy.done { color: #21633f; }
 
   .limits { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px 24px; }
   .limits strong { display: block; font-weight: 600; margin-bottom: 4px; }
@@ -132,10 +130,10 @@
   footer code { font-size: var(--text-sm); }
 
   @media (hover: hover) and (pointer: fine) {
-    .bookmarklet:hover { background: #fff; }
+    .bookmarklet:hover { background: #333; }
     .bookmarklet:hover svg { transform: rotate(-10deg) translateY(-1px); }
     .tool:hover img, .tool:hover pre { border-color: var(--border-strong); }
-    .copy:hover { background: oklch(1 0 0 / 14%); }
+    .copy:hover { background: #dededb; }
   }
   @media (prefers-reduced-motion: reduce) {
     .bookmarklet, .bookmarklet svg, .copy { transition: background-color 160ms ease; }
@@ -167,23 +165,23 @@
     <h2 id="tools-title">Tools</h2>
     <div class="tools">
       <figure class="tool">
-        <img src="examples/style-tweaker.jpg" width="1400" height="875" alt="Style tweaker adjusting the Fernwood test store headline" loading="lazy">
+        <img src="examples/style-tweaker.jpg" width="1400" height="875" alt="Style tweaker adjusting the Vesna demo store headline" loading="lazy">
         <figcaption><strong>Style tweaker</strong><span>Adjust spacing, type, color, and corners. Copies as CSS or Tailwind.</span></figcaption>
       </figure>
       <figure class="tool">
-        <img src="examples/arranger.jpg" width="1400" height="875" alt="Arranger rotating product photography on the Fernwood test store" loading="lazy">
+        <img src="examples/arranger.jpg" width="1400" height="875" alt="Arranger rotating product photography on the Vesna demo store" loading="lazy">
         <figcaption><strong>Arranger</strong><span>Move, scale, and rotate anything. Copies as JSON.</span></figcaption>
       </figure>
       <figure class="tool">
-        <img src="examples/content-editor.jpg" width="1400" height="875" alt="Content editor rewriting the Fernwood test store headline" loading="lazy">
+        <img src="examples/content-editor.jpg" width="1400" height="875" alt="Content editor rewriting the Vesna demo store headline" loading="lazy">
         <figcaption><strong>Content editor</strong><span>Click text and type over it. Copies a before-and-after list.</span></figcaption>
       </figure>
       <figure class="tool">
-        <img src="examples/figma.jpg" width="1400" height="875" alt="Copy to Figma selecting the Fernwood store hero for SVG export" loading="lazy">
+        <img src="examples/figma.jpg" width="1400" height="875" alt="Copy to Figma selecting the Vesna store hero for SVG export" loading="lazy">
         <figcaption><strong>Copy to Figma</strong><span>Pick a section or the whole page. Copy or download SVG to import into Figma.</span></figcaption>
       </figure>
       <figure class="tool">
-        <img src="examples/annotate.jpg" width="1600" height="1000" alt="Annotate pinning a numbered note to a mug, with the note listed in the panel" loading="lazy">
+        <img src="examples/annotate.jpg" width="1600" height="1000" alt="Annotate pinning a numbered note to a jacket, with the note listed in the panel" loading="lazy">
         <figcaption><strong>Annotate</strong><span>Click anything to pin a numbered note. Copies the notes as a list.</span></figcaption>
       </figure>
       <figure class="tool">
@@ -193,8 +191,8 @@
   <b>"data"</b>: {
     <b>"edits"</b>: [{
       <b>"selector"</b>: <i>"main h1"</i>,
-      <b>"before"</b>: <i>"Coffee gear for unhurried mornings"</i>,
-      <b>"after"</b>: <i>"Make mornings slower"</i>
+      <b>"before"</b>: <i>"Spring is here"</i>,
+      <b>"after"</b>: <i>"Go your own way"</i>
     }]
   },
   <b>"page"</b>: <i>"https://…/sample.html"</i>
