@@ -153,12 +153,13 @@
 <main>
   <header class="hero">
     <h1>Turn your prototype into a canvas</h1>
-    <p class="pitch">Tweak styles, move things, rewrite copy, and pin notes on websites from your browser toolbar. Export your changes for Figma or a coding agent.</p>
+    <p class="pitch">Tweak styles, move things, rewrite copy, and pin notes on websites. Open Toolbox from your bookmarks bar or extension toolbar, then export your changes for Figma or a coding agent.</p>
     <div class="cta">
-      <a class="bookmarklet" style="cursor:pointer" href="prototype-toolbox-extension.zip" download>Download extension</a>
-      <a href="#install">Installation steps</a>
-      <span class="hint">Chrome, Edge, Brave &amp; Arc · desktop</span>
+      <a class="bookmarklet" id="bookmarklet" href="{{BOOKMARKLET_HREF}}" onclick="return bookmarkletClicked(event)" draggable="true" title="Drag to your bookmarks bar" translate="no">Prototype Toolbox</a>
+      <a href="#bookmarklet-setup">Bookmarklet setup</a>
+      <a href="#install">Get the extension</a>
     </div>
+    <p class="hint">Drag the button to your bookmarks bar. Click it on a page to open Toolbox. Some sites block bookmarklets; the extension supports more sites.</p>
   </header>
 
   <section id="tools" aria-labelledby="tools-title">
@@ -202,8 +203,27 @@
     </div>
   </section>
 
+  <section id="bookmarklet-setup" aria-labelledby="bookmarklet-title">
+    <h2 id="bookmarklet-title">Add it to your bookmarks bar</h2>
+    <ol class="steps">
+      <li><span>Show Chrome’s bookmarks bar with <strong>⌘ + Shift + B</strong> on Mac or <strong>Ctrl + Shift + B</strong> on Windows.</span></li>
+      <li><span>Drag the <strong>Prototype Toolbox</strong> button at the top of this page into the bar.</span></li>
+      <li><span>Open a prototype or website and click the saved bookmark. Click it again to hide Toolbox.</span></li>
+    </ol>
+    <p class="hint">No extension installation needed. Requires access to Shopify Quick. If a site blocks the script, Toolbox reports the loading failure; the extension is the more compatible option.</p>
+    <details>
+      <summary>Set up the bookmark manually</summary>
+      <p>Create a bookmark named Prototype Toolbox and paste this code into its URL field.</p>
+      <div class="code">
+        <pre id="code" translate="no">{{BOOKMARKLET_CODE}}</pre>
+        <button class="copy" type="button" id="copy" aria-label="Copy bookmarklet code">Copy</button>
+        <span class="visually-hidden" id="copy-status" aria-live="polite"></span>
+      </div>
+    </details>
+  </section>
+
   <section id="install" aria-labelledby="install-title">
-    <h2 id="install-title">Add it to your toolbar</h2>
+    <h2 id="install-title">Use the extension on more sites</h2>
     <ol class="steps">
       <li><span><a href="prototype-toolbox-extension.zip" download>Download the extension</a> and unzip it into a folder you’ll keep.</span></li>
       <li><span>Open <code>chrome://extensions</code> (or <code>edge://extensions</code>) and turn on <strong>Developer mode</strong>.</span></li>
@@ -211,15 +231,6 @@
       <li><span>Pin <strong>Prototype Toolbox</strong> in the Extensions menu. Click its icon on a website to open or hide the tools.</span></li>
     </ol>
     <p class="hint">Shortcut: Alt/Option + Shift + T. No account or hosted scripts needed after installation. If your work browser blocks Developer mode, your browser administrator must allow it.</p>
-    <details>
-      <summary>Legacy bookmarklet</summary>
-      <p>The extension is recommended. This older bookmarklet is blocked by many sites and requires access to Shopify Quick.</p><p><a id="bookmarklet" href="{{BOOKMARKLET_HREF}}" onclick="return bookmarkletClicked(event)" translate="no">Prototype toolbox bookmarklet</a></p>
-      <div class="code">
-        <pre id="code" translate="no">{{BOOKMARKLET_CODE}}</pre>
-        <button class="copy" type="button" id="copy" aria-label="Copy bookmarklet code">Copy</button>
-        <span class="visually-hidden" id="copy-status" aria-live="polite"></span>
-      </div>
-    </details>
   </section>
 
   <section aria-labelledby="limits-title">

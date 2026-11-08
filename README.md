@@ -6,6 +6,10 @@ A browser toolbar extension for prototyping on real websites. Tweak styles, rear
 
 The landing page and sample store use Shopify sign-in. The GitHub download is public, and the installed extension works independently of the hosted site.
 
+## Quick setup with a bookmarklet
+
+Open the [landing page](https://prototype-toolbox.quick.shopify.io/) and drag **Prototype Toolbox** to your bookmarks bar. Click the saved bookmark on a prototype or website to open the same tools. No extension installation is needed. Sites can block the remote script, and Shopify Quick sign-in is required; use the extension below for broader website support.
+
 ## Install in Chrome
 
 1. Download the ZIP above and unzip it into a folder you will keep.
@@ -44,7 +48,7 @@ Selectors containing ` >>> ` cross open shadow roots: query the first segment, t
 
 The manifest requests only `activeTab`, `scripting`, and `clipboardWrite`. There are no broad host permissions, analytics, background page scans, or remote executable code. Page content remains in the current tab unless you explicitly copy or download it. Image export may request image URLs already present on the page to embed them into the SVG.
 
-The optional legacy bookmarklet still exists on the landing page. Strict CSPs or cross-site Shopify sign-in can block it; use the extension for those sites.
+The bookmarklet loads the same tools from the landing page’s host. Strict CSPs or cross-site Shopify sign-in can block it; use the extension for those sites.
 
 ## Development
 
